@@ -129,3 +129,4 @@ if os.path.exists(LOG_FILE):
     st.download_button("📥 ログをCSVでダウンロード", df.to_csv(index=False), file_name="export_log.csv", mime="text/csv")
 else:
     st.info("まだログがありません。")
+
