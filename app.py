@@ -1,132 +1,149 @@
 import os
+import re
 import io
-import csv
-import base64
-from datetime import datetime
-from PIL import Image
+import time
+import datetime
 import streamlit as st
 import dropbox
 import pandas as pd
+from dotenv import load_dotenv
 
-# 🔐 Dropbox認証（.envではなく、Secretsから取得）
-APP_KEY = os.environ.get("DROPBOX_APP_KEY")
-APP_SECRET = os.environ.get("DROPBOX_APP_SECRET")
-REFRESH_TOKEN = os.environ.get("DROPBOX_REFRESH_TOKEN")
+# .env 読み込み
+load_dotenv()
 
-if not (APP_KEY and APP_SECRET and REFRESH_TOKEN):
-    st.error("Dropboxの認証情報が不足しています")
-    st.stop()
-
+# Dropbox認証
 dbx = dropbox.Dropbox(
-    app_key=APP_KEY,
-    app_secret=APP_SECRET,
-    oauth2_refresh_token=REFRESH_TOKEN
+    app_key=os.getenv("DROPBOX_APP_KEY"),
+    app_secret=os.getenv("DROPBOX_APP_SECRET"),
+    oauth2_refresh_token=os.getenv("DROPBOX_REFRESH_TOKEN")
 )
 
-user_name = dbx.users_get_current_account().name.display_name
-
-# 📁 パス設定
-ZIP_FOLDER = "/成年コミック"
+SOURCE_FOLDER = "/成年コミック"
 THUMBNAIL_FOLDER = "/サムネイル"
-EXPORT_FOLDER = "/SideBooksExport"  # Dropbox共有フォルダ
-LOG_FILE = "export_log.csv"
+EXPORT_FOLDER = "/SideBooksExport"
+LOG_PATH = f"{SOURCE_FOLDER}/export_log.csv"
 
-st.set_page_config(page_title="サムネイルからSideBooks出力", layout="wide")
-st.title("🖼 サムネイル選択でSideBooksへエクスポート")
-st.caption(f"こんにちは、{user_name} さん")
+# 連番やシリーズと判定するパターン
+def is_serialized(name):
+    name = os.path.splitext(name)[0]
+    return bool(re.search(r"(上|中|下|前|後|\b\d+\b|[IVX]{1,5}|\d+-\d+)$", name, re.IGNORECASE))
 
-# サムネイル一覧取得
-@st.cache_data
-def list_thumbnails():
+def clean_title(name):
+    name = os.path.splitext(name)[0]
+    name = name.replace("(成年コミック)", "").strip()
+    return name
+
+def extract_author(name):
+    match = re.match(r"\[([^\]]+)\]", name)
+    return match.group(1) if match else ""
+
+def get_thumbnails():
     try:
-        entries = dbx.files_list_folder(THUMBNAIL_FOLDER).entries
-        return sorted([e.name for e in entries if e.name.lower().endswith((".jpg", ".jpeg", ".png"))])
+        res = dbx.files_list_folder(THUMBNAIL_FOLDER)
+        return [entry.name for entry in res.entries if entry.name.endswith(".jpg")]
     except Exception as e:
-        st.error(f"サムネイル一覧取得エラー: {e}")
+        st.error(f"サムネイル取得失敗: {e}")
         return []
 
-# サムネイル画像取得
-@st.cache_data
-def get_thumbnail_image(name):
+def map_zip_paths():
+    zip_map = {}
     try:
-        metadata, res = dbx.files_download(f"{THUMBNAIL_FOLDER}/{name}")
-        return Image.open(io.BytesIO(res.content))
+        res = dbx.files_list_folder(SOURCE_FOLDER, recursive=True)
+        entries = res.entries
+        while res.has_more:
+            res = dbx.files_list_folder_continue(res.cursor)
+            entries.extend(res.entries)
+        for entry in entries:
+            if isinstance(entry, dropbox.files.FileMetadata) and entry.name.lower().endswith(".zip"):
+                zip_map[entry.name] = entry.path_display
     except Exception as e:
-        st.warning(f"{name} 読み込み失敗: {e}")
-        return None
+        st.error(f"ZIPファイル一覧取得失敗: {e}")
+    return zip_map
 
-# ZIPファイルコピー（SideBooksExportへ）
-def copy_zip_file(zip_name):
+def export_zip(zip_name, src_path):
     try:
-        from_path = f"{ZIP_FOLDER}/{zip_name}"
-        to_path = f"{EXPORT_FOLDER}/{zip_name}"
-        dbx.files_copy_v2(from_path, to_path, allow_shared_folder=True, autorename=True)
-        return to_path
-    except dropbox.exceptions.ApiError:
-        # fallback: download/upload方式
-        try:
-            _, res = dbx.files_download(from_path)
-            dbx.files_upload(res.content, to_path, mode=dropbox.files.WriteMode.overwrite)
-            return to_path
-        except Exception as e:
-            st.error(f"コピー失敗: {e}")
-            return None
+        with dbx.files_download_to_file("/tmp/temp.zip", src_path):
+            with open("/tmp/temp.zip", "rb") as f:
+                dbx.files_upload(f.read(), f"{EXPORT_FOLDER}/{zip_name}", mode=dropbox.files.WriteMode.overwrite)
+        return True
+    except Exception as e:
+        st.error(f"{zip_name} のエクスポートに失敗: {e}")
+        return False
 
-# ログ記録
-def log_export(user, filename):
-    write_header = not os.path.exists(LOG_FILE)
-    with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if write_header:
-            writer.writerow(["ユーザー名", "ファイル名", "日時"])
-        writer.writerow([user, filename, datetime.now().isoformat()])
+def write_export_log(log_data):
+    try:
+        df = pd.DataFrame(log_data, columns=["timestamp", "username", "filename"])
+        with io.StringIO() as csv_buffer:
+            df.to_csv(csv_buffer, index=False)
+            dbx.files_upload(csv_buffer.getvalue().encode("utf-8"), LOG_PATH, mode=dropbox.files.WriteMode.overwrite)
+    except Exception as e:
+        st.warning(f"ログ保存失敗: {e}")
 
-# ✅ 選択状態保持
-if "selected_thumbnails" not in st.session_state:
-    st.session_state.selected_thumbnails = set()
+# Streamlit UI開始
+st.set_page_config(page_title="SideBooks ZIP共有", layout="wide")
+st.title("📦 ZIP画像一覧ビューア（Dropbox共有フォルダ）")
 
-# 📌 選択されたZIPを表示・エクスポート
-st.subheader("📌 選択中")
-if st.session_state.selected_thumbnails:
-    for thumb in st.session_state.selected_thumbnails:
-        zip_candidate = thumb.replace(".jpg", ".zip").replace(".jpeg", ".zip").replace(".png", ".zip")
-        display_name = zip_candidate.replace("(成年コミック)", "").strip()
-        st.markdown(f"✅ `{display_name}`")
-    if st.button("📤 選択中のZIPをSideBooksExportにエクスポート"):
-        for thumb in st.session_state.selected_thumbnails:
-            zip_name = thumb.replace(".jpg", ".zip").replace(".jpeg", ".zip").replace(".png", ".zip")
-            result = copy_zip_file(zip_name)
-            if result:
-                st.success(f"{zip_name} をSideBooksExportに保存しました")
-                log_export(user_name, zip_name)
+try:
+    user_name = dbx.users_get_current_account().name.display_name
+except Exception:
+    user_name = "guest"
+
+st.markdown(f"こんにちは、{user_name} さん")
+
+# 表示順切り替え
+sort_option = st.selectbox("並び順を選択してください", ["タイトル順", "作家順"])
+
+# ファイル取得
+thumbnails = get_thumbnails()
+zip_paths = map_zip_paths()
+
+# 重複除去＋連番考慮
+unique_titles = {}
+selected_titles = []
+
+for thumb in thumbnails:
+    zip_name = thumb.replace(".jpg", ".zip")
+    clean = clean_title(zip_name)
+    if is_serialized(clean) or clean not in unique_titles:
+        unique_titles[clean] = zip_name  # 上書きなしで記録
+
+# 並び替え
+if sort_option == "作家順":
+    sorted_items = sorted(unique_titles.items(), key=lambda x: extract_author(x[1]))
 else:
-    st.info("サムネイルを選択してください")
+    sorted_items = sorted(unique_titles.items(), key=lambda x: x[0].lower())
 
-# 🖼 サムネイルグリッド表示＋チェックボックス
-thumbs = list_thumbnails()
-for i in range(0, len(thumbs), 5):
-    row = st.columns(5)
-    for j in range(5):
-        if i + j < len(thumbs):
-            thumb_name = thumbs[i + j]
-            img = get_thumbnail_image(thumb_name)
-            with row[j]:
-                if img:
-                    st.image(img, width=150)
-                label = thumb_name.replace(".jpg", "").replace(".jpeg", "").replace(".png", "")
-                checked = st.checkbox(label, value=(thumb_name in st.session_state.selected_thumbnails), key=thumb_name)
-                if checked:
-                    st.session_state.selected_thumbnails.add(thumb_name)
-                else:
-                    st.session_state.selected_thumbnails.discard(thumb_name)
+# ジャンプリンク作成
+st.markdown("🔤 **ジャンプ：** " + " ".join([f"[{c}](#{c})" for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]))
 
-# 📄 エクスポートログ
-st.markdown("---")
-st.subheader("📄 エクスポートログ")
-if os.path.exists(LOG_FILE):
-    df = pd.read_csv(LOG_FILE)
-    st.dataframe(df, use_container_width=True)
-    st.download_button("📥 ログをCSVでダウンロード", df.to_csv(index=False), file_name="export_log.csv", mime="text/csv")
-else:
-    st.info("まだログがありません。")
+# チェックボックスUI
+selection = []
+current_letter = ""
+for clean, zip_name in sorted_items:
+    first = clean[0].upper()
+    if first != current_letter and first.isalpha():
+        st.markdown(f"<h2 id='{first}'>===== {first} =====</h2>", unsafe_allow_html=True)
+        current_letter = first
+    col1, col2 = st.columns([1, 9])
+    with col1:
+        checked = st.checkbox("選択", key=zip_name)
+    with col2:
+        st.image(f"https://content.dropboxapi.com/2/files/download", width=120,
+                 headers={"Dropbox-API-Arg": f'{{"path": "{THUMBNAIL_FOLDER}/{zip_name.replace(".zip", ".jpg")}"}}'})
+        st.caption(clean)
+    if checked:
+        selection.append(zip_name)
 
+# エクスポート処理
+if selection:
+    if st.button("📤 選択したZIPをエクスポート"):
+        success_logs = []
+        for zip_name in selection:
+            if zip_name in zip_paths:
+                ok = export_zip(zip_name, zip_paths[zip_name])
+                if ok:
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    success_logs.append([timestamp, user_name, zip_name])
+        if success_logs:
+            write_export_log(success_logs)
+            st.success(f"{len(success_logs)} 件をエクスポート＆ログ記録しました！")
