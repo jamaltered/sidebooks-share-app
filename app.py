@@ -6,14 +6,12 @@ from datetime import datetime
 from PIL import Image
 import streamlit as st
 import dropbox
-from dotenv import load_dotenv
 import pandas as pd
 
-# 🔐 Dropbox認証
-load_dotenv()
-APP_KEY = os.getenv("DROPBOX_APP_KEY")
-APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
-REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
+# 🔐 Dropbox認証（.envではなく、Secretsから取得）
+APP_KEY = os.environ.get("DROPBOX_APP_KEY")
+APP_SECRET = os.environ.get("DROPBOX_APP_SECRET")
+REFRESH_TOKEN = os.environ.get("DROPBOX_REFRESH_TOKEN")
 
 if not (APP_KEY and APP_SECRET and REFRESH_TOKEN):
     st.error("Dropboxの認証情報が不足しています")
