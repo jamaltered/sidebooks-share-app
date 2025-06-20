@@ -44,6 +44,9 @@ except Exception:
     st.warning("Dropboxの認証情報が不足しています")
     st.stop()
 
+# User-Agent取得（デバイス情報）
+user_agent = st.request.headers.get("user-agent", "unknown")
+
 # ヘッダー + エクスポートボタン（追従ヘッダー）
 st.markdown(f"""
 <style>
@@ -98,14 +101,15 @@ if st.session_state.selected_files:
 
             def write_export_log(selected_names):
                 from datetime import datetime
+                from pytz import timezone
                 import io
                 import csv
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                now = datetime.now(timezone("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M:%S")
                 log_data = io.StringIO()
                 writer = csv.writer(log_data)
-                writer.writerow(["timestamp", "user", "filename"])
+                writer.writerow(["timestamp", "user", "device", "filename"])
                 for name in selected_names:
-                    writer.writerow([now, user_name, name])
+                    writer.writerow([now, user_name, user_agent, name])
                 log_content = log_data.getvalue()
 
                 try:
