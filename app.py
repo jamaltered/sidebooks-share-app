@@ -22,13 +22,32 @@ TARGET_FOLDER = "/成年コミック"
 THUMBNAIL_FOLDER = "/サムネイル"
 EXPORT_FOLDER = "/SideBooksExport"
 
-st.set_page_config(page_title="ZIPビューア", layout="wide")
-st.title("📦 ZIP画像一覧ビューア（Dropbox共有フォルダ）")
+st.set_page_config(page_title="コミック一覧", layout="wide")
+
+# ヘッダー + エクスポートボタン（追従ヘッダー）
+st.markdown("""
+<style>
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  background-color: white;
+  padding: 0.5rem;
+  border-bottom: 1px solid #ddd;
+}
+</style>
+<div class='sticky-header'>
+  <h2 style='margin: 0; font-size: 1.2rem;'>📚 コミック一覧</h2>
+  <div style='margin-top: 4px;'>
+    <strong>✅ 選択中: {}</strong>
+  </div>
+</div>
+""".format(len(st.session_state.get("selected_files", []))), unsafe_allow_html=True)
 
 # ユーザー名取得
 try:
     user_name = dbx.users_get_current_account().name.display_name
-    st.markdown(f"こんにちは、**{user_name}** さん")
+    st.caption(f"こんにちは、{user_name} さん")
 except Exception:
     st.warning("Dropboxの認証情報が不足しています")
     st.stop()
@@ -100,8 +119,6 @@ zip_files = list_zip_files()
 thumbnails = list_thumbnails()
 zip_set = {entry.name for entry in zip_files}
 
-st.markdown("### 表示するZIPファイルを選んでください")
-
 # グリッド表示（5列）
 cols_per_row = 5
 columns = st.columns(cols_per_row)
@@ -119,20 +136,28 @@ for thumb in sorted(thumbnails):
     if url:
         col = columns[i % cols_per_row]
         with col:
+            st.markdown("""
+                <div style='border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; background-color:#f9f9f9; text-align:center;'>
+            """, unsafe_allow_html=True)
+
             checked = zip_name in st.session_state.selected_files
             if st.checkbox(title_display, value=checked, key=zip_name):
                 st.session_state.selected_files.add(zip_name)
             else:
                 st.session_state.selected_files.discard(zip_name)
-            st.image(url, caption=title_display, use_container_width=True)
+
+            st.image(url, use_container_width=True)
+
+            st.markdown("""</div>""", unsafe_allow_html=True)
         i += 1
 
 # 選択済み表示・エクスポートボタン
 if st.session_state.selected_files:
     st.markdown("---")
-    st.markdown("### ✅ 選択されたZIPファイル：")
-    for f in sorted(st.session_state.selected_files):
-        st.write(f)
-    if st.button("📤 SideBooksExport にエクスポート"):
-        export_selected_files(st.session_state.selected_files)
-        st.success("SideBooksExport にコピーしました！")
+    with st.container():
+        st.markdown("### ✅ 選択されたZIPファイル：")
+        for f in sorted(st.session_state.selected_files):
+            st.write(f)
+        if st.button("📤 SideBooksExport にエクスポート"):
+            export_selected_files(st.session_state.selected_files)
+            st.success("SideBooksExport にコピーしました！")
