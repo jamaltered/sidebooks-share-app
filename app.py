@@ -150,11 +150,11 @@ for thumb in sorted(thumbnails):
         col = columns[i % cols_per_row]
         with col:
             st.markdown("""
-                <div style='border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; background-color:#fefefe; text-align:center;'>
+                <div style='border:1px solid #ccc; border-radius:8px; padding:6px; margin:6px; background-color:#fff; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.1);'>
             """, unsafe_allow_html=True)
 
             st.image(url, use_container_width=True)
-            st.markdown(f"<div style='font-size: 0.85rem; margin: 6px 0;'>{title_display}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size: 0.85rem; margin: 6px 0; font-weight: 500; color:#222;'>{title_display}</div>", unsafe_allow_html=True)
 
             checked = zip_name in st.session_state.selected_files
             if st.checkbox("選択", value=checked, key=zip_name):
