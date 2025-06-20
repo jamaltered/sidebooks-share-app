@@ -1,4 +1,4 @@
-# app.py（最新版：ジャンプ改善＋日本語50音対応）
+# app.py（最新版：ジャンプ改善＋日本語50音対応＋デバッグ付き）
 
 import os
 import re
@@ -122,27 +122,31 @@ st.markdown(f"こんにちは、{user_name} さん")
 
 sort_option = st.selectbox("並び順を選択してください", ["タイトル順", "作家順"])
 
-tumbnails = get_thumbnails()
+thumbnails = get_thumbnails()
 zip_paths = map_zip_paths()
+
+st.info(f"🔍 サムネイル数: {len(thumbnails)} 件")
+st.info(f"📦 ZIPファイル数: {len(zip_paths)} 件")
+
 unique_titles = {}
-for thumb in tumbnails:
+for thumb in thumbnails:
     zip_name = thumb.replace(".jpg", ".zip")
     clean = clean_title(zip_name)
     if is_serialized(clean) or clean not in unique_titles:
         unique_titles[clean] = zip_name
+
+st.info(f"🧠 表示対象数: {len(unique_titles)} 件")
 
 if sort_option == "作家順":
     sorted_items = sorted(unique_titles.items(), key=lambda x: extract_author(x[1]))
 else:
     sorted_items = sorted(unique_titles.items(), key=lambda x: x[0].lower())
 
-# グループ化
 grouped = {}
 for clean, zip_name in sorted_items:
     group = get_group_label(clean)
     grouped.setdefault(group, []).append((clean, zip_name))
 
-# ジャンプリンク
 st.markdown("🔤 ジャンプ: " + " ".join([f"[{k}](#{k})" for k in list(jp_groups.keys()) + alpha_groups]))
 
 selection = []
