@@ -99,7 +99,7 @@ for thumb in sorted(thumbnails):
                     <img src="{url}" style="height:200px; object-fit:cover; border-radius:5px;" />
                     <div style="margin-top:8px;">
                         <input type="checkbox" id="{zip_name}" name="{zip_name}" {'checked' if zip_name in st.session_state.selected_files else ''} onchange="window.location.href='?toggle={zip_name}'" />
-                        <label for="{zip_name}" style="font-size:13px; font-weight:500;">{title_display}</label>
+                        <label for="{zip_name}" style="font-size:13px; font-weight:500; color:#111;">{title_display}</label>
                     </div>
                 </div>
             ''', unsafe_allow_html=True)
