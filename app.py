@@ -24,6 +24,10 @@ EXPORT_FOLDER = "/SideBooksExport"
 
 st.set_page_config(page_title="コミック一覧", layout="wide")
 
+# 初期状態（表示の前に必要）
+if "selected_files" not in st.session_state:
+    st.session_state.selected_files = set()
+
 # ヘッダー + エクスポートボタン（追従ヘッダー）
 st.markdown("""
 <style>
@@ -42,7 +46,7 @@ st.markdown("""
     <strong>✅ 選択中: {}</strong>
   </div>
 </div>
-""".format(len(st.session_state.get("selected_files", []))), unsafe_allow_html=True)
+""".format(len(st.session_state.selected_files)), unsafe_allow_html=True)
 
 # ユーザー名取得
 try:
@@ -109,10 +113,6 @@ def export_selected_files(selected_names):
             dbx.files_copy_v2(src_path, dst_path, allow_shared_folder=True, autorename=True)
         except Exception as e:
             st.error(f"{name} のコピーに失敗しました: {e}")
-
-# 初期状態
-if "selected_files" not in st.session_state:
-    st.session_state.selected_files = set()
 
 # ZIPとサムネイル一覧取得
 zip_files = list_zip_files()
