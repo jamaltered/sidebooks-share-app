@@ -3,7 +3,6 @@ import re
 import dropbox
 import streamlit as st
 from dotenv import load_dotenv
-from datetime import datetime
 
 # 環境変数の読み込み
 load_dotenv()
@@ -46,18 +45,23 @@ st.markdown(f"""
   position: sticky;
   top: 0;
   z-index: 999;
-  background-color: white;
+  background-color: #111;
   padding: 0.5rem;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #444;
+}}
+.sticky-header h2 {{
+  margin: 0;
+  font-size: 1.2rem;
+  color: white;
 }}
 .sticky-header strong {{
-  color: #007bff;
+  color: white;
 }}
 </style>
 <div class='sticky-header'>
-  <h2 style='margin: 0; font-size: 1.2rem;'>📚 コミック一覧</h2>
+  <h2>📚 コミック一覧</h2>
   <div style='margin-top: 4px;'>
-    <strong style='color:#444;'>✅ 選択中: {selected_count}</strong>
+    <strong>✅ 選択中: {selected_count}</strong>
   </div>
 """, unsafe_allow_html=True)
 
@@ -77,7 +81,7 @@ if st.session_state.selected_files:
                         dbx.files_copy_v2(src_path, dst_path, allow_shared_folder=True, autorename=True)
                     except Exception as e:
                         st.error(f"{name} のコピーに失敗しました: {e}")
-                write_export_log(selected_names)
+                append_to_log(selected_names)
 
             def clear_export_folder():
                 try:
@@ -91,25 +95,22 @@ if st.session_state.selected_files:
                 except Exception as e:
                     st.error(f"エクスポートフォルダの削除に失敗しました: {e}")
 
-            def write_export_log(files):
-                from io import StringIO
-                import csv
-                output = StringIO()
-                writer = csv.writer(output)
+            def append_to_log(names):
+                import io
+                import pandas as pd
+                from datetime import datetime
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                for f in files:
-                    writer.writerow([now, user_name, f])
-                output.seek(0)
-
-                # 既存ログ読み込み + 追記
+                new_logs = pd.DataFrame([{ "user": user_name, "file": name, "timestamp": now } for name in names])
                 try:
                     _, res = dbx.files_download(LOG_PATH)
-                    old_data = res.content.decode("utf-8")
-                    combined = old_data + output.getvalue()
+                    old_logs = pd.read_csv(io.BytesIO(res.content))
+                    merged = pd.concat([old_logs, new_logs], ignore_index=True)
                 except:
-                    combined = output.getvalue()
-
-                dbx.files_upload(combined.encode("utf-8"), LOG_PATH, mode=dropbox.files.WriteMode.overwrite)
+                    merged = new_logs
+                buffer = io.BytesIO()
+                merged.to_csv(buffer, index=False)
+                buffer.seek(0)
+                dbx.files_upload(buffer.read(), LOG_PATH, mode=dropbox.files.WriteMode.overwrite)
 
             export_selected_files(st.session_state.selected_files)
             st.success("SideBooksExport に保存しました！")
@@ -172,18 +173,19 @@ for thumb in sorted(thumbnails):
     if url:
         col = columns[i % cols_per_row]
         with col:
-            st.markdown("""
-                <div style='border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; background-color:#fefefe; text-align:center;'>
-            """, unsafe_allow_html=True)
-
-            st.image(url, use_container_width=True)
-            st.markdown(f"<div style='font-size: 0.85rem; margin: 6px 0;'>{title_display}</div>", unsafe_allow_html=True)
-
             checked = zip_name in st.session_state.selected_files
-            if st.checkbox("選択", value=checked, key=zip_name):
+            box = st.checkbox("選択", value=checked, key=zip_name)
+            if box:
                 st.session_state.selected_files.add(zip_name)
             else:
                 st.session_state.selected_files.discard(zip_name)
+
+            st.markdown("""
+                <div style='border:1px solid #333; border-radius:10px; padding:8px; margin:6px; background-color:#1a1a1a; text-align:center;'>
+            """, unsafe_allow_html=True)
+
+            st.image(url, use_container_width=True)
+            st.markdown(f"<div style='font-size: 0.85rem; margin: 6px 0; color: white;'>{title_display}</div>", unsafe_allow_html=True)
 
             st.markdown("""</div>""", unsafe_allow_html=True)
         i += 1
