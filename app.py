@@ -174,6 +174,7 @@ for thumb in sorted(thumbnails):
             <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
               {title_display}
             </div>
+            <div>
         """, unsafe_allow_html=True)
 
         if st.checkbox("選択", value=checked, key=zip_name):
@@ -181,4 +182,7 @@ for thumb in sorted(thumbnails):
         else:
             st.session_state.selected_files.discard(zip_name)
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("""
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
