@@ -105,10 +105,10 @@ except Exception:
     st.warning("Dropboxの認証情報が不足しています")
     st.stop()
 
-# User-Agent取得（デバイス情報）
-user_agent = st.request.headers.get("user-agent", "unknown")
+# User-Agent取得（仮）
+user_agent = "unknown"  # 今は取得できないため固定値
 
-# ヘッダー + エクスポートボタン（追従ヘッダー）
+# ヘッダー + エクスポートボタン
 st.markdown(f"""
 <style>
 .sticky-header {{
@@ -130,7 +130,7 @@ st.markdown(f"""
   </div>
 """, unsafe_allow_html=True)
 
-# 選択済み表示・エクスポートボタン
+# 選択済みの表示 + エクスポート
 if st.session_state.selected_files:
     with st.container():
         st.markdown("### ✅ 選択されたZIPファイル：")
@@ -196,19 +196,18 @@ for thumb in visible_thumbs:
     if zip_name not in zip_set:
         continue
 
-    title_display = re.sub(r"^\(成年コミック\)\s*", "", zip_name.replace(".zip", ""))
+    title_display = re.sub(r"^\\(成年コミック\\)\\s*", "", zip_name.replace(".zip", ""))
     thumb_path = f"{THUMBNAIL_FOLDER}/{thumb}"
     url = get_temporary_image_url(thumb_path)
 
     if url:
-        checkbox_id = f"checkbox_{zip_name}"
-        st.markdown(f"""
+        st.markdown(f\"\"\"
         <div style='background-color:#fff; border-radius:10px; padding:10px; margin:10px 0; box-shadow:0 0 6px rgba(0,0,0,0.1);'>
             <img src='{url}' style='width:100%; height:auto; border-radius:6px;' />
             <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
               {title_display}
             </div>
-        """, unsafe_allow_html=True)
+        \"\"\", unsafe_allow_html=True)
 
         st.checkbox(
             "選択",
@@ -220,4 +219,5 @@ for thumb in visible_thumbs:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
+# ページトップリンク
 st.markdown(top_link, unsafe_allow_html=True)
