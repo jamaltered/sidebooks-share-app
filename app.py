@@ -21,13 +21,13 @@ dbx = dropbox.Dropbox(
 TARGET_FOLDER = "/成年コミック"
 THUMBNAIL_FOLDER = "/サムネイル"
 EXPORT_FOLDER = "/SideBooksExport"
+LOG_PATH = f"{THUMBNAIL_FOLDER}/export_log.csv"
 
 st.set_page_config(page_title="コミック一覧", layout="wide")
 
 # 初期状態
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
-
 selected_count = len(st.session_state.selected_files)
 
 # ユーザー名取得
@@ -59,7 +59,7 @@ st.markdown(f"""
   </div>
 """, unsafe_allow_html=True)
 
-# 選択済み表示・エクスポートボタン（ヘッダーの下に移動）
+# 選択済み表示・エクスポートボタン
 if st.session_state.selected_files:
     with st.container():
         st.markdown("### ✅ 選択されたZIPファイル：")
@@ -75,6 +75,7 @@ if st.session_state.selected_files:
                         dbx.files_copy_v2(src_path, dst_path, allow_shared_folder=True, autorename=True)
                     except Exception as e:
                         st.error(f"{name} のコピーに失敗しました: {e}")
+                write_export_log(selected_names)
 
             def clear_export_folder():
                 try:
@@ -88,12 +89,37 @@ if st.session_state.selected_files:
                 except Exception as e:
                     st.error(f"エクスポートフォルダの削除に失敗しました: {e}")
 
+            def write_export_log(selected_names):
+                from datetime import datetime
+                import io
+                import csv
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                log_data = io.StringIO()
+                writer = csv.writer(log_data)
+                writer.writerow(["timestamp", "user", "filename"])
+                for name in selected_names:
+                    writer.writerow([now, user_name, name])
+                log_content = log_data.getvalue()
+
+                try:
+                    # 既存ログがあれば取得
+                    _, res = dbx.files_download(LOG_PATH)
+                    existing = res.content.decode("utf-8")
+                except:
+                    existing = ""
+                combined = existing.strip() + "\n" + log_content.strip() + "\n"
+
+                try:
+                    dbx.files_upload(combined.encode("utf-8"), LOG_PATH, mode=dropbox.files.WriteMode.overwrite)
+                except Exception as e:
+                    st.error(f"ログ書き込み失敗: {e}")
+
             export_selected_files(st.session_state.selected_files)
             st.success("SideBooksExport に保存しました！")
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ZIPファイル一覧の取得
+# ファイル一覧取得
 def list_zip_files():
     zip_files = []
     try:
@@ -106,7 +132,6 @@ def list_zip_files():
         st.error(f"ZIPファイルの取得に失敗: {e}")
     return zip_files
 
-# サムネイル一覧の取得
 def list_thumbnails():
     thumbnails = []
     try:
@@ -119,7 +144,6 @@ def list_thumbnails():
         st.error(f"サムネイルの取得に失敗: {e}")
     return thumbnails
 
-# 一時リンク取得
 def get_temporary_image_url(path):
     try:
         res = dbx.files_get_temporary_link(path)
@@ -127,15 +151,9 @@ def get_temporary_image_url(path):
     except:
         return None
 
-# ZIPとサムネイル一覧取得
 zip_files = list_zip_files()
 thumbnails = list_thumbnails()
 zip_set = {entry.name for entry in zip_files}
-
-# グリッド表示（5列）
-cols_per_row = 5
-columns = st.columns(cols_per_row)
-i = 0
 
 for thumb in sorted(thumbnails):
     zip_name = thumb.rsplit('.', 1)[0] + ".zip"
@@ -147,20 +165,20 @@ for thumb in sorted(thumbnails):
     url = get_temporary_image_url(thumb_path)
 
     if url:
-        col = columns[i % cols_per_row]
-        with col:
-            st.markdown("""
-                <div style='border:1px solid #ddd; border-radius:10px; padding:10px; margin:8px; background-color:#ffffff; text-align:center;'>
-            """, unsafe_allow_html=True)
+        checked = zip_name in st.session_state.selected_files
+        checkbox_id = f"checkbox_{zip_name}"
 
-            st.image(url, use_container_width=True)
-            st.markdown(f"<div style='font-size: 0.85rem; margin: 6px 0;'>{title_display}</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='background-color:#fff; border-radius:10px; padding:10px; margin:10px 0; box-shadow:0 0 6px rgba(0,0,0,0.1);'>
+            <img src='{url}' style='width:100%; height:auto; border-radius:6px;' />
+            <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
+              {title_display}
+            </div>
+        """, unsafe_allow_html=True)
 
-            checked = zip_name in st.session_state.selected_files
-            if st.checkbox("選択", value=checked, key=zip_name):
-                st.session_state.selected_files.add(zip_name)
-            else:
-                st.session_state.selected_files.discard(zip_name)
+        if st.checkbox("選択", value=checked, key=zip_name):
+            st.session_state.selected_files.add(zip_name)
+        else:
+            st.session_state.selected_files.discard(zip_name)
 
-            st.markdown("""</div>""", unsafe_allow_html=True)
-        i += 1
+        st.markdown("</div>", unsafe_allow_html=True)
