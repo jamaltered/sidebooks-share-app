@@ -28,25 +28,27 @@ st.set_page_config(page_title="コミック一覧", layout="wide")
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 
+selected_count = len(st.session_state.selected_files)
+
 # ヘッダー + エクスポートボタン（追従ヘッダー）
-st.markdown("""
+st.markdown(f"""
 <style>
-.sticky-header {
+.sticky-header {{
   position: sticky;
   top: 0;
   z-index: 999;
   background-color: white;
   padding: 0.5rem;
   border-bottom: 1px solid #ddd;
-}
+}}
 </style>
 <div class='sticky-header'>
   <h2 style='margin: 0; font-size: 1.2rem;'>📚 コミック一覧</h2>
   <div style='margin-top: 4px;'>
-    <strong>✅ 選択中: {}</strong>
+    <strong>✅ 選択中: {selected_count}</strong>
   </div>
 </div>
-""".format(len(st.session_state.selected_files)), unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # ユーザー名取得
 try:
