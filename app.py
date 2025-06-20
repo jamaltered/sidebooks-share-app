@@ -94,12 +94,15 @@ for thumb in sorted(thumbnails):
     if url:
         col = columns[i % cols_per_row]
         with col:
-            st.image(url, use_container_width=True)
-            checked = st.checkbox(title_display, key=zip_name, value=zip_name in st.session_state.selected_files)
-            if checked:
-                st.session_state.selected_files.add(zip_name)
-            else:
-                st.session_state.selected_files.discard(zip_name)
+            st.markdown(f'''
+                <div style="border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; text-align:center; background-color:#f9f9f9;">
+                    <img src="{url}" style="height:200px; object-fit:cover; border-radius:5px;" />
+                    <div style="margin-top:8px;">
+                        <input type="checkbox" id="{zip_name}" name="{zip_name}" {'checked' if zip_name in st.session_state.selected_files else ''} onchange="window.location.href='?toggle={zip_name}'" />
+                        <label for="{zip_name}" style="font-size:13px; font-weight:500;">{title_display}</label>
+                    </div>
+                </div>
+            ''', unsafe_allow_html=True)
         i += 1
 
 # 選択済み表示・エクスポートボタン
