@@ -95,12 +95,29 @@ def export_selected_files(selected_names):
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 
+# セッションURL処理
+query_params = st.experimental_get_query_params()
+if "toggle" in query_params:
+    toggled = query_params["toggle"][0]
+    if toggled in st.session_state.selected_files:
+        st.session_state.selected_files.remove(toggled)
+    else:
+        st.session_state.selected_files.add(toggled)
+    st.experimental_set_query_params()  # クエリをクリア（即再描画）
+    st.experimental_rerun()
+
 # ZIPとサムネイル一覧取得
 zip_files = list_zip_files()
 thumbnails = list_thumbnails()
 zip_set = {entry.name for entry in zip_files}
 
-st.markdown("### 表示するZIPファイルを選んでください")
+# 📌 固定バナー（上部に表示）
+st.markdown(f"""
+<div style="position:sticky; top:0; background-color:#ffffffee; padding:10px 0; z-index:999; border-bottom:1px solid #ccc;">
+    <strong>✅ 選択中: {len(st.session_state.selected_files)} 件</strong>
+    {"<form method='post'><button name='export' style='margin-left:20px; padding:6px 12px;'>📤 SideBooksExport にエクスポート</button></form>" if st.session_state.selected_files else ""}
+</div>
+""", unsafe_allow_html=True)
 
 # グリッド表示（5列）
 cols_per_row = 5
@@ -121,21 +138,17 @@ for thumb in sorted(thumbnails):
         with col:
             st.markdown(f'''
                 <div style="border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; text-align:center; background-color:#f9f9f9;">
-                    <img src="{url}" style="height:200px; object-fit:cover; border-radius:5px;" />
-                    <div style="margin-top:8px;">
-                        <input type="checkbox" id="{zip_name}" name="{zip_name}" {'checked' if zip_name in st.session_state.selected_files else ''} onchange="window.location.href='?toggle={zip_name}'" />
-                        <label for="{zip_name}" style="font-size:13px; font-weight:500; color:#111;">{title_display}</label>
-                    </div>
+                    <a href="?toggle={zip_name}" style="text-decoration:none;">
+                        <img src="{url}" style="height:200px; object-fit:cover; border-radius:5px;" />
+                        <div style="margin-top:8px; font-size:13px; font-weight:500; color:#111;">
+                            {'✅ ' if zip_name in st.session_state.selected_files else ''}{title_display}
+                        </div>
+                    </a>
                 </div>
             ''', unsafe_allow_html=True)
         i += 1
 
-# 選択済み表示・エクスポートボタン
-if st.session_state.selected_files:
-    st.markdown("---")
-    st.markdown("### ✅ 選択されたZIPファイル：")
-    for f in sorted(st.session_state.selected_files):
-        st.write(f)
-    if st.button("📤 SideBooksExport にエクスポート"):
-        export_selected_files(st.session_state.selected_files)
-        st.success("SideBooksExport にコピーしました！")
+# エクスポート実行
+if st.session_state.selected_files and st.session_state.get("_form_data") == "export":
+    export_selected_files(st.session_state.selected_files)
+    st.success("SideBooksExport にコピーしました！")
