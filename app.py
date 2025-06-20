@@ -77,7 +77,11 @@ zip_set = {entry.name for entry in zip_files}
 
 st.markdown("### 表示するZIPファイルを選んでください")
 
-# サムネイル表示
+# グリッド表示（5列）
+cols_per_row = 5
+columns = st.columns(cols_per_row)
+i = 0
+
 for thumb in sorted(thumbnails):
     zip_name = thumb.replace(".jpg", ".zip")
     if zip_name not in zip_set:
@@ -88,16 +92,15 @@ for thumb in sorted(thumbnails):
     url = get_temporary_image_url(thumb_path)
 
     if url:
-        col1, col2 = st.columns([1, 6])
-        with col1:
-            selected = st.checkbox("", key=zip_name, value=zip_name in st.session_state.selected_files)
-            if selected:
+        col = columns[i % cols_per_row]
+        with col:
+            st.image(url, use_container_width=True)
+            checked = st.checkbox(title_display, key=zip_name, value=zip_name in st.session_state.selected_files)
+            if checked:
                 st.session_state.selected_files.add(zip_name)
             else:
                 st.session_state.selected_files.discard(zip_name)
-        with col2:
-            st.image(url, use_container_width=True)
-            st.caption(title_display)
+        i += 1
 
 # 選択済み表示・エクスポートボタン
 if st.session_state.selected_files:
