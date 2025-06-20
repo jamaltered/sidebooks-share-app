@@ -30,6 +30,67 @@ if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 selected_count = len(st.session_state.selected_files)
 
+# サムネイル取得・ページ処理
+def list_zip_files():
+    zip_files = []
+    try:
+        result = dbx.files_list_folder(TARGET_FOLDER, recursive=True)
+        zip_files.extend([entry for entry in result.entries if entry.name.endswith(".zip")])
+        while result.has_more:
+            result = dbx.files_list_folder_continue(result.cursor)
+            zip_files.extend([entry for entry in result.entries if entry.name.endswith(".zip")])
+    except Exception as e:
+        st.error(f"ZIPファイルの取得に失敗: {e}")
+    return zip_files
+
+def list_thumbnails():
+    thumbnails = []
+    try:
+        result = dbx.files_list_folder(THUMBNAIL_FOLDER)
+        thumbnails.extend([entry.name for entry in result.entries if entry.name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))])
+        while result.has_more:
+            result = dbx.files_list_folder_continue(result.cursor)
+            thumbnails.extend([entry.name for entry in result.entries if entry.name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))])
+    except Exception as e:
+        st.error(f"サムネイルの取得に失敗: {e}")
+    return thumbnails
+
+def get_temporary_image_url(path):
+    try:
+        res = dbx.files_get_temporary_link(path)
+        return res.link
+    except:
+        return None
+
+zip_files = list_zip_files()
+thumbnails = list_thumbnails()
+zip_set = {entry.name for entry in zip_files}
+
+# ページネーション
+PER_PAGE = 500
+max_pages = (len(thumbnails) + PER_PAGE - 1) // PER_PAGE
+if "page" not in st.session_state:
+    st.session_state.page = 1
+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col1:
+    if st.button("⬅ 前へ") and st.session_state.page > 1:
+        st.session_state.page -= 1
+with col2:
+    st.selectbox("ページ番号", options=list(range(1, max_pages + 1)), key="page")
+with col3:
+    if st.button("次へ ➡") and st.session_state.page < max_pages:
+        st.session_state.page += 1
+
+page = st.session_state.page
+start_idx = (page - 1) * PER_PAGE
+end_idx = start_idx + PER_PAGE
+visible_thumbs = sorted(thumbnails)[start_idx:end_idx]
+
+# ページトップリンク
+top_link = "<a href='#top' style='position:fixed;bottom:30px;right:30px;background:#007bff;color:white;padding:10px 15px;border-radius:8px;text-decoration:none;'>↑ Top</a>"
+st.markdown("<div id='top'></div>", unsafe_allow_html=True)
+
 # チェックボックスのトグル処理
 def toggle_selection(zip_name):
     if zip_name in st.session_state and st.session_state[zip_name]:
@@ -129,43 +190,8 @@ if st.session_state.selected_files:
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ファイル一覧取得
-def list_zip_files():
-    zip_files = []
-    try:
-        result = dbx.files_list_folder(TARGET_FOLDER, recursive=True)
-        zip_files.extend([entry for entry in result.entries if entry.name.endswith(".zip")])
-        while result.has_more:
-            result = dbx.files_list_folder_continue(result.cursor)
-            zip_files.extend([entry for entry in result.entries if entry.name.endswith(".zip")])
-    except Exception as e:
-        st.error(f"ZIPファイルの取得に失敗: {e}")
-    return zip_files
-
-def list_thumbnails():
-    thumbnails = []
-    try:
-        result = dbx.files_list_folder(THUMBNAIL_FOLDER)
-        thumbnails.extend([entry.name for entry in result.entries if entry.name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))])
-        while result.has_more:
-            result = dbx.files_list_folder_continue(result.cursor)
-            thumbnails.extend([entry.name for entry in result.entries if entry.name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))])
-    except Exception as e:
-        st.error(f"サムネイルの取得に失敗: {e}")
-    return thumbnails
-
-def get_temporary_image_url(path):
-    try:
-        res = dbx.files_get_temporary_link(path)
-        return res.link
-    except:
-        return None
-
-zip_files = list_zip_files()
-thumbnails = list_thumbnails()
-zip_set = {entry.name for entry in zip_files}
-
-for thumb in sorted(thumbnails):
+# 一覧表示
+for thumb in visible_thumbs:
     zip_name = thumb.rsplit('.', 1)[0] + ".zip"
     if zip_name not in zip_set:
         continue
@@ -193,3 +219,5 @@ for thumb in sorted(thumbnails):
         )
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown(top_link, unsafe_allow_html=True)
