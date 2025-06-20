@@ -23,7 +23,6 @@ THUMBNAIL_FOLDER = "/サムネイル"
 EXPORT_FOLDER = "/SideBooksExport"
 LOG_PATH = f"{SOURCE_FOLDER}/export_log.csv"
 
-# 連番やシリーズと判定するパターン
 def is_serialized(name):
     name = os.path.splitext(name)[0]
     return bool(re.search(r"(上|中|下|前|後|\b\d+\b|[IVX]{1,5}|\d+-\d+)$", name, re.IGNORECASE))
@@ -59,6 +58,14 @@ def map_zip_paths():
     except Exception as e:
         st.error(f"ZIPファイル一覧取得失敗: {e}")
     return zip_map
+
+def get_temporary_image_url(path):
+    try:
+        link = dbx.files_get_temporary_link(path)
+        return link.link
+    except Exception as e:
+        st.warning(f"画像取得失敗: {e}")
+        return None
 
 def export_zip(zip_name, src_path):
     try:
@@ -105,7 +112,7 @@ for thumb in thumbnails:
     zip_name = thumb.replace(".jpg", ".zip")
     clean = clean_title(zip_name)
     if is_serialized(clean) or clean not in unique_titles:
-        unique_titles[clean] = zip_name  # 上書きなしで記録
+        unique_titles[clean] = zip_name
 
 # 並び替え
 if sort_option == "作家順":
@@ -128,8 +135,12 @@ for clean, zip_name in sorted_items:
     with col1:
         checked = st.checkbox("選択", key=zip_name)
     with col2:
-        st.image(f"https://content.dropboxapi.com/2/files/download", width=120,
-                 headers={"Dropbox-API-Arg": f'{{"path": "{THUMBNAIL_FOLDER}/{zip_name.replace(".zip", ".jpg")}"}}'})
+        image_path = f"{THUMBNAIL_FOLDER}/{zip_name.replace('.zip', '.jpg')}"
+        img_url = get_temporary_image_url(image_path)
+        if img_url:
+            st.image(img_url, width=120)
+        else:
+            st.text("❌画像なし")
         st.caption(clean)
     if checked:
         selection.append(zip_name)
