@@ -166,23 +166,19 @@ for thumb in sorted(thumbnails):
 
     if url:
         checked = zip_name in st.session_state.selected_files
-        checkbox_id = f"checkbox_{zip_name}"
 
-        st.markdown(f"""
-        <div style='background-color:#fff; border-radius:10px; padding:10px; margin:10px 0; box-shadow:0 0 6px rgba(0,0,0,0.1);'>
-            <img src='{url}' style='width:100%; height:auto; border-radius:6px;' />
-            <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
-              {title_display}
-            </div>
-            <div>
-        """, unsafe_allow_html=True)
+        with st.container():
+            st.markdown(f"""
+            <div style='background-color:#fff; border-radius:10px; padding:10px; margin:10px 0; box-shadow:0 0 6px rgba(0,0,0,0.1);'>
+                <img src='{url}' style='width:100%; height:auto; border-radius:6px;' />
+                <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
+                  {title_display}
+                </div>
+            """, unsafe_allow_html=True)
 
-        if st.checkbox("選択", value=checked, key=zip_name):
-            st.session_state.selected_files.add(zip_name)
-        else:
-            st.session_state.selected_files.discard(zip_name)
+            if st.checkbox("選択", value=checked, key=zip_name):
+                st.session_state.selected_files.add(zip_name)
+            else:
+                st.session_state.selected_files.discard(zip_name)
 
-        st.markdown("""
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
