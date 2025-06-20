@@ -3,3 +3,4 @@ dropbox
 python-dotenv
 Pillow
 pandas
+pykakasi
