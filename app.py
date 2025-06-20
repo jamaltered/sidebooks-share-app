@@ -24,11 +24,18 @@ EXPORT_FOLDER = "/SideBooksExport"
 
 st.set_page_config(page_title="コミック一覧", layout="wide")
 
-# 初期状態（表示の前に必要）
+# 初期状態
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 
 selected_count = len(st.session_state.selected_files)
+
+# ユーザー名取得
+try:
+    user_name = dbx.users_get_current_account().name.display_name
+except Exception:
+    st.warning("Dropboxの認証情報が不足しています")
+    st.stop()
 
 # ヘッダー + エクスポートボタン（追従ヘッダー）
 st.markdown(f"""
@@ -41,22 +48,50 @@ st.markdown(f"""
   padding: 0.5rem;
   border-bottom: 1px solid #ddd;
 }}
+.sticky-header strong {{
+  color: #007bff;
+}}
 </style>
 <div class='sticky-header'>
   <h2 style='margin: 0; font-size: 1.2rem;'>📚 コミック一覧</h2>
   <div style='margin-top: 4px;'>
-    <strong>✅ 選択中: {selected_count}</strong>
+    <strong style='color:#444;'>✅ 選択中: {selected_count}</strong>
   </div>
-</div>
 """, unsafe_allow_html=True)
 
-# ユーザー名取得
-try:
-    user_name = dbx.users_get_current_account().name.display_name
-    st.caption(f"こんにちは、{user_name} さん")
-except Exception:
-    st.warning("Dropboxの認証情報が不足しています")
-    st.stop()
+# 選択済み表示・エクスポートボタン（ヘッダーの下に移動）
+if st.session_state.selected_files:
+    with st.container():
+        st.markdown("### ✅ 選択されたZIPファイル：")
+        for f in sorted(st.session_state.selected_files):
+            st.write(f)
+        if st.button("📤 SideBooksExport にエクスポート"):
+            def export_selected_files(selected_names):
+                clear_export_folder()
+                for name in selected_names:
+                    src_path = f"{TARGET_FOLDER}/{name}"
+                    dst_path = f"{EXPORT_FOLDER}/{name}"
+                    try:
+                        dbx.files_copy_v2(src_path, dst_path, allow_shared_folder=True, autorename=True)
+                    except Exception as e:
+                        st.error(f"{name} のコピーに失敗しました: {e}")
+
+            def clear_export_folder():
+                try:
+                    result = dbx.files_list_folder(EXPORT_FOLDER)
+                    for entry in result.entries:
+                        dbx.files_delete_v2(entry.path_lower)
+                    while result.has_more:
+                        result = dbx.files_list_folder_continue(result.cursor)
+                        for entry in result.entries:
+                            dbx.files_delete_v2(entry.path_lower)
+                except Exception as e:
+                    st.error(f"エクスポートフォルダの削除に失敗しました: {e}")
+
+            export_selected_files(st.session_state.selected_files)
+            st.success("SideBooksExport にコピーしました！")
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ZIPファイル一覧の取得
 def list_zip_files():
@@ -76,10 +111,10 @@ def list_thumbnails():
     thumbnails = []
     try:
         result = dbx.files_list_folder(THUMBNAIL_FOLDER)
-        thumbnails.extend([entry.name for entry in result.entries if entry.name.endswith(".jpg")])
+        thumbnails.extend([entry.name for entry in result.entries if entry.name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))])
         while result.has_more:
             result = dbx.files_list_folder_continue(result.cursor)
-            thumbnails.extend([entry.name for entry in result.entries if entry.name.endswith(".jpg")])
+            thumbnails.extend([entry.name for entry in result.entries if entry.name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))])
     except Exception as e:
         st.error(f"サムネイルの取得に失敗: {e}")
     return thumbnails
@@ -92,30 +127,6 @@ def get_temporary_image_url(path):
     except:
         return None
 
-# SideBooksExport フォルダを空にする
-def clear_export_folder():
-    try:
-        result = dbx.files_list_folder(EXPORT_FOLDER)
-        for entry in result.entries:
-            dbx.files_delete_v2(entry.path_lower)
-        while result.has_more:
-            result = dbx.files_list_folder_continue(result.cursor)
-            for entry in result.entries:
-                dbx.files_delete_v2(entry.path_lower)
-    except Exception as e:
-        st.error(f"エクスポートフォルダの削除に失敗しました: {e}")
-
-# ファイルをコピーする
-def export_selected_files(selected_names):
-    clear_export_folder()
-    for name in selected_names:
-        src_path = f"{TARGET_FOLDER}/{name}"
-        dst_path = f"{EXPORT_FOLDER}/{name}"
-        try:
-            dbx.files_copy_v2(src_path, dst_path, allow_shared_folder=True, autorename=True)
-        except Exception as e:
-            st.error(f"{name} のコピーに失敗しました: {e}")
-
 # ZIPとサムネイル一覧取得
 zip_files = list_zip_files()
 thumbnails = list_thumbnails()
@@ -127,7 +138,7 @@ columns = st.columns(cols_per_row)
 i = 0
 
 for thumb in sorted(thumbnails):
-    zip_name = thumb.replace(".jpg", ".zip")
+    zip_name = thumb.rsplit('.', 1)[0] + ".zip"
     if zip_name not in zip_set:
         continue
 
@@ -139,27 +150,17 @@ for thumb in sorted(thumbnails):
         col = columns[i % cols_per_row]
         with col:
             st.markdown("""
-                <div style='border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; background-color:#f9f9f9; text-align:center;'>
+                <div style='border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; background-color:#fefefe; text-align:center;'>
             """, unsafe_allow_html=True)
 
+            st.image(url, use_container_width=True)
+            st.markdown(f"<div style='font-size: 0.85rem; margin: 6px 0;'>{title_display}</div>", unsafe_allow_html=True)
+
             checked = zip_name in st.session_state.selected_files
-            if st.checkbox(title_display, value=checked, key=zip_name):
+            if st.checkbox("選択", value=checked, key=zip_name):
                 st.session_state.selected_files.add(zip_name)
             else:
                 st.session_state.selected_files.discard(zip_name)
 
-            st.image(url, use_container_width=True)
-
             st.markdown("""</div>""", unsafe_allow_html=True)
         i += 1
-
-# 選択済み表示・エクスポートボタン
-if st.session_state.selected_files:
-    st.markdown("---")
-    with st.container():
-        st.markdown("### ✅ 選択されたZIPファイル：")
-        for f in sorted(st.session_state.selected_files):
-            st.write(f)
-        if st.button("📤 SideBooksExport にエクスポート"):
-            export_selected_files(st.session_state.selected_files)
-            st.success("SideBooksExport にコピーしました！")
