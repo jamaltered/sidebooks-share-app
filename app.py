@@ -3,7 +3,7 @@ import re
 import dropbox
 import streamlit as st
 from dotenv import load_dotenv
-import datetime
+from datetime import datetime
 
 # 環境変数の読み込み
 load_dotenv()
@@ -22,6 +22,7 @@ dbx = dropbox.Dropbox(
 TARGET_FOLDER = "/成年コミック"
 THUMBNAIL_FOLDER = "/サムネイル"
 EXPORT_FOLDER = "/SideBooksExport"
+LOG_PATH = f"{THUMBNAIL_FOLDER}/export_log.csv"
 
 st.set_page_config(page_title="コミック一覧", layout="wide")
 
@@ -49,41 +50,16 @@ st.markdown(f"""
   padding: 0.5rem;
   border-bottom: 1px solid #ddd;
 }}
-.sticky-header h2 {{
-  color: #111;
-  font-size: 1.25rem;
-  margin: 0;
-}}
 .sticky-header strong {{
   color: #007bff;
 }}
 </style>
 <div class='sticky-header'>
-  <h2>📚 コミック一覧</h2>
+  <h2 style='margin: 0; font-size: 1.2rem;'>📚 コミック一覧</h2>
   <div style='margin-top: 4px;'>
-    <strong>✅ 選択中: {selected_count}</strong>
+    <strong style='color:#444;'>✅ 選択中: {selected_count}</strong>
   </div>
 """, unsafe_allow_html=True)
-
-# ログ出力関数
-def append_export_log(user, filenames):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_path = f"{THUMBNAIL_FOLDER}/export_log.csv"
-    csv_rows = [f"{timestamp},{user},{f}" for f in filenames]
-    csv_data = "\n".join(csv_rows) + "\n"
-
-    try:
-        existing = ""
-        try:
-            md, res = dbx.files_download(log_path)
-            existing = res.content.decode("utf-8")
-        except dropbox.exceptions.ApiError:
-            pass  # 初回なのでファイルが存在しなくてもOK
-
-        updated = existing + csv_data
-        dbx.files_upload(updated.encode("utf-8"), log_path, mode=dropbox.files.WriteMode.overwrite)
-    except Exception as e:
-        st.warning(f"ログ保存に失敗しました: {e}")
 
 # 選択済み表示・エクスポートボタン（ヘッダーの下に移動）
 if st.session_state.selected_files:
@@ -101,6 +77,7 @@ if st.session_state.selected_files:
                         dbx.files_copy_v2(src_path, dst_path, allow_shared_folder=True, autorename=True)
                     except Exception as e:
                         st.error(f"{name} のコピーに失敗しました: {e}")
+                write_export_log(selected_names)
 
             def clear_export_folder():
                 try:
@@ -114,9 +91,28 @@ if st.session_state.selected_files:
                 except Exception as e:
                     st.error(f"エクスポートフォルダの削除に失敗しました: {e}")
 
+            def write_export_log(files):
+                from io import StringIO
+                import csv
+                output = StringIO()
+                writer = csv.writer(output)
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                for f in files:
+                    writer.writerow([now, user_name, f])
+                output.seek(0)
+
+                # 既存ログ読み込み + 追記
+                try:
+                    _, res = dbx.files_download(LOG_PATH)
+                    old_data = res.content.decode("utf-8")
+                    combined = old_data + output.getvalue()
+                except:
+                    combined = output.getvalue()
+
+                dbx.files_upload(combined.encode("utf-8"), LOG_PATH, mode=dropbox.files.WriteMode.overwrite)
+
             export_selected_files(st.session_state.selected_files)
-            append_export_log(user_name, st.session_state.selected_files)
-            st.success("SideBooksExport にコピー＆ログ保存しました！")
+            st.success("SideBooksExport に保存しました！")
 
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -176,20 +172,18 @@ for thumb in sorted(thumbnails):
     if url:
         col = columns[i % cols_per_row]
         with col:
-            checked = zip_name in st.session_state.selected_files
-            st.markdown(f"""
-                <div style='background-color:#fff; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); padding:10px; margin:8px; text-align:center;'>
-                    <img src="{url}" style="max-height:200px; object-fit:contain; width:100%; margin-bottom:8px;" />
-                    <div style='font-size: 0.85rem; font-weight: bold; color: #111; margin-bottom: 8px;'>{title_display}</div>
-                    <label style="font-size: 0.9rem; color: #333;">
-                        <input type="checkbox" {'checked' if checked else ''} onchange="" disabled /> 選択
-                    </label>
+            st.markdown("""
+                <div style='border:1px solid #ddd; border-radius:10px; padding:8px; margin:6px; background-color:#fefefe; text-align:center;'>
             """, unsafe_allow_html=True)
 
+            st.image(url, use_container_width=True)
+            st.markdown(f"<div style='font-size: 0.85rem; margin: 6px 0;'>{title_display}</div>", unsafe_allow_html=True)
+
+            checked = zip_name in st.session_state.selected_files
             if st.checkbox("選択", value=checked, key=zip_name):
                 st.session_state.selected_files.add(zip_name)
             else:
                 st.session_state.selected_files.discard(zip_name)
 
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("""</div>""", unsafe_allow_html=True)
         i += 1
