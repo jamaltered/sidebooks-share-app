@@ -28,6 +28,8 @@ st.set_page_config(page_title="コミック一覧", layout="wide")
 # 初期状態
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
+if "page" not in st.session_state:
+    st.session_state.page = 1
 selected_count = len(st.session_state.selected_files)
 
 # サムネイル取得・ページ処理
@@ -69,18 +71,18 @@ zip_set = {entry.name for entry in zip_files}
 # ページネーション
 PER_PAGE = 200
 max_pages = (len(thumbnails) + PER_PAGE - 1) // PER_PAGE
-if "page" not in st.session_state:
-    st.session_state.page = 1
+current_page = st.session_state.page
 
 col1, col2, col3 = st.columns([1, 2, 1])
 with col1:
-    if st.button("⬅ 前へ") and st.session_state.page > 1:
-        st.session_state.page -= 1
+    if st.button("⬅ 前へ") and current_page > 1:
+        st.session_state.page = current_page - 1
 with col2:
-    st.selectbox("ページ番号", options=list(range(1, max_pages + 1)), key="page")
+    selected = st.selectbox("ページ番号", options=list(range(1, max_pages + 1)), index=current_page - 1)
+    st.session_state.page = selected
 with col3:
-    if st.button("次へ ➡") and st.session_state.page < max_pages:
-        st.session_state.page += 1
+    if st.button("次へ ➡") and current_page < max_pages:
+        st.session_state.page = current_page + 1
 
 page = st.session_state.page
 start_idx = (page - 1) * PER_PAGE
@@ -88,24 +90,27 @@ end_idx = start_idx + PER_PAGE
 visible_thumbs = sorted(thumbnails)[start_idx:end_idx]
 
 # ページトップリンク
-st.markdown("""
+st.markdown("<div id='top'></div>", unsafe_allow_html=True)
+top_link = """
 <style>
-#top-button {
-  position: fixed;
-  bottom: 120px;
-  right: 20px;
-  z-index: 1000;
-  background-color: #007bff;
-  color: white;
-  padding: 12px 20px;
-  font-size: 18px;
-  border-radius: 10px;
-  text-decoration: none;
+#scroll-top-btn {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    background: #007bff;
+    color: white;
+    padding: 14px 20px;
+    border-radius: 10px;
+    text-decoration: none;
+    z-index: 1000;
+    font-size: 16px;
+    font-weight: bold;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
 </style>
-<a href="#top" id="top-button">↑ Top</a>
-<div id='top'></div>
-""", unsafe_allow_html=True)
+<a href='#top' id='scroll-top-btn'>↑ Top</a>
+"""
+st.markdown(top_link, unsafe_allow_html=True)
 
 # チェックボックスのトグル処理
 def toggle_selection(zip_name):
@@ -121,7 +126,8 @@ except Exception:
     st.warning("Dropboxの認証情報が不足しています")
     st.stop()
 
-user_agent = "unknown"
+# User-Agent取得（デバイス情報）
+user_agent = "unknown"  # User-Agent は取得不可のため仮設定
 
 # ヘッダー + エクスポートボタン（追従ヘッダー）
 st.markdown(f"""
@@ -145,6 +151,7 @@ st.markdown(f"""
   </div>
 """, unsafe_allow_html=True)
 
+# 選択済み表示・エクスポートボタン
 if st.session_state.selected_files:
     with st.container():
         st.markdown("### ✅ 選択されたZIPファイル：")
@@ -233,3 +240,5 @@ for thumb in visible_thumbs:
         )
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown(top_link, unsafe_allow_html=True)
