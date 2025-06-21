@@ -163,3 +163,81 @@ if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabl
         st.error(f"⚠️ ログファイルの更新に失敗しました: {e}")
 
     st.success(f"✅ エクスポート完了: {success_count} 件成功、{fail_count} 件失敗")
+
+# 不一致ファイル表示
+unmatched_images = []
+unmatched_zips = []
+image_base_names = set(os.path.splitext(name)[0] for name in all_thumbs)
+zip_base_names = set(os.path.splitext(name)[0] for name in zip_files_in_source)
+
+for base_name in image_base_names:
+    if base_name not in zip_base_names:
+        unmatched_images.append(base_name)
+
+for base_name in zip_base_names:
+    if base_name not in image_base_names:
+        unmatched_zips.append(base_name)
+
+if unmatched_images:
+    st.markdown("### ❌ 画像はあるけどZIPがないファイル:")
+    for name in unmatched_images:
+        st.write("- ", name + ".jpg")
+
+if unmatched_zips:
+    st.markdown("### ❌ ZIPはあるけど画像がないファイル:")
+    for name in unmatched_zips:
+        st.write("- ", name + ".zip")
+
+st.markdown("""
+<style>
+.card-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 20px;
+}
+.card {
+    background: white;
+    padding: 12px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.card img {
+    height: 200px;
+    object-fit: contain;
+    margin-bottom: 10px;
+}
+.card label {
+    font-size: 14px;
+    display: block;
+    margin-bottom: 8px;
+    word-wrap: break-word;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="card-container">', unsafe_allow_html=True)
+for thumb in visible_thumbs:
+    zip_name = os.path.splitext(thumb)[0] + ".zip"
+    image_path = f"{THUMBNAIL_FOLDER}/{thumb}"
+    image_url = get_temporary_image_url(image_path)
+    cb_key = f"cb_{zip_name}_{thumb}"
+    is_checked = zip_name in st.session_state.selected_files
+
+    with st.container():
+        st.markdown(f"""
+        <div class="card">
+            <img src="{image_url}" alt="{zip_name}" />
+            <label><strong>{zip_name}</strong></label>
+        </div>
+        """, unsafe_allow_html=True)
+        checked = st.checkbox("選択", value=is_checked, key=cb_key)
+        if checked:
+            st.session_state.selected_files.add(zip_name)
+        else:
+            st.session_state.selected_files.discard(zip_name)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("---")
+st.write("🧪 デバッグ出力")
+st.write("選択されたZIP:", list(st.session_state.selected_files))
