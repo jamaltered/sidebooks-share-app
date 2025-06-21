@@ -48,7 +48,7 @@ if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
-ITEMS_PER_PAGE = 100  # サムネイル表示数を100件に変更
+ITEMS_PER_PAGE = 100  # サムネイル表示数を100件
 
 # サムネイル名加工関数
 def clean_filename(filename):
@@ -130,7 +130,7 @@ card_css = """
     border-radius: 12px;
     text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    position: relative; /* チェックボックス位置調整 */
+    position: relative;
 }
 .card img {
     height: 200px;
@@ -144,7 +144,7 @@ card_css = """
     word-wrap: break-word;
 }
 .stCheckbox {
-    z-index: 10; /* チェックボックスがクリック可能 */
+    z-index: 10;
     position: relative;
 }
 button[kind="primary"] {
@@ -249,4 +249,56 @@ for name in current_thumbs:
     image_path = f"{THUMBNAIL_FOLDER}/{name}"
     try:
         image_url = dbx.files_get_temporary_link(image_path).link
-    except dropbox
+    except dropbox.exceptions.ApiError as e:
+        image_url = ""
+        st.warning(f"画像 {name} の取得に失敗しました: {str(e)}")
+
+    with st.container():
+        st.markdown(f"""
+        <div class="card">
+            <img src="{image_url}" alt="{display_zip_name}" />
+            <label><strong>{display_zip_name}</strong></label>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # チェックボックス（キー強化）
+        checkbox_key = f"cb_{zip_name}_{st.session_state.page}_{name}_{uuid4()}"
+        checked = st.checkbox(
+            "選択",
+            key=checkbox_key,
+            value=zip_name in st.session_state.selected_files
+        )
+        if checked:
+            st.session_state.selected_files.add(zip_name)
+        else:
+            st.session_state.selected_files.discard(zip_name)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ページトップリンク
+st.markdown("""
+<a href="#top" class="top-button">↑ Top</a>
+<style>
+.top-button {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    background: #000000;
+    color: white !important;
+    padding: 14px 20px;
+    font-size: 20px;
+    border-radius: 50px;
+    text-decoration: none;
+    z-index: 9999;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    /* 提案: フォントサイズを18pxに */
+    /* font-size: 18px !important; */
+    /* 提案: 角の丸みを8pxに */
+    /* border-radius: 8px !important; */
+}
+.top-button:hover {
+    background: #333333;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
