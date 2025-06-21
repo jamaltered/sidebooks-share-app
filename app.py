@@ -57,9 +57,24 @@ def get_temporary_image_url(path):
     except:
         return None
 
+# ZIP元フォルダにあるファイル名一覧を取得
+try:
+    zip_files_in_source = [entry.name for entry in dbx.files_list_folder(ZIP_SRC_FOLDER).entries if isinstance(entry, dropbox.files.FileMetadata)]
+except Exception as e:
+    st.error(f"ZIP元フォルダのファイル一覧取得に失敗: {e}")
+    zip_files_in_source = []
+
 PER_PAGE = 200
 all_thumbs = list_all_thumbnail_files()
-max_pages = (len(all_thumbs) + PER_PAGE - 1) // PER_PAGE
+
+# サムネイル画像に対応するZIPファイルが実際に存在するものだけに絞る
+filtered_thumbs = []
+for thumb in all_thumbs:
+    zip_name = os.path.splitext(thumb)[0] + ".zip"
+    if zip_name in zip_files_in_source:
+        filtered_thumbs.append(thumb)
+
+max_pages = (len(filtered_thumbs) + PER_PAGE - 1) // PER_PAGE
 page = st.session_state.page
 
 col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
@@ -77,7 +92,7 @@ with col4:
 
 start = (page - 1) * PER_PAGE
 end = start + PER_PAGE
-visible_thumbs = all_thumbs[start:end]
+visible_thumbs = filtered_thumbs[start:end]
 
 st.markdown("""
 <a href="#top" class="top-button">↑ Top</a>
@@ -101,7 +116,6 @@ st.markdown("""
 st.markdown("### 📚 コミック一覧")
 st.markdown(f"<p>✅選択中: {len(st.session_state.selected_files)}</p>", unsafe_allow_html=True)
 
-# ボタンを上に移動
 export_disabled = not st.session_state.selected_files
 if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabled):
     success_count = 0
@@ -122,11 +136,13 @@ if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabl
         src_path = f"{ZIP_SRC_FOLDER}/{zip_name}"
         dest_path = f"{ZIP_DEST_FOLDER}/{zip_name}"
         try:
+            dbx.files_get_metadata(src_path)
             dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
             log_lines.append(f"{timestamp},{device},{zip_name}")
             success_count += 1
         except dropbox.exceptions.ApiError as e:
-            st.error(f"❌ {zip_name} のコピーに失敗: {e}")
+            st.error(f"❌ コピー失敗: {zip_name}")
+            st.code(f"src_path: {src_path}\nエラー: {e}")
             fail_count += 1
 
     try:
@@ -147,58 +163,3 @@ if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabl
         st.error(f"⚠️ ログファイルの更新に失敗しました: {e}")
 
     st.success(f"✅ エクスポート完了: {success_count} 件成功、{fail_count} 件失敗")
-
-st.markdown("""
-<style>
-.card-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 20px;
-}
-.card {
-    background: white;
-    padding: 12px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-.card img {
-    height: 200px;
-    object-fit: contain;
-    margin-bottom: 10px;
-}
-.card label {
-    font-size: 14px;
-    display: block;
-    margin-bottom: 8px;
-    word-wrap: break-word;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="card-container">', unsafe_allow_html=True)
-for thumb in visible_thumbs:
-    zip_name = os.path.splitext(thumb)[0] + ".zip"
-    image_path = f"{THUMBNAIL_FOLDER}/{thumb}"
-    image_url = get_temporary_image_url(image_path)
-    cb_key = f"cb_{zip_name}_{thumb}"
-    is_checked = zip_name in st.session_state.selected_files
-
-    with st.container():
-        st.markdown(f"""
-        <div class="card">
-            <img src="{image_url}" alt="{zip_name}" />
-            <label><strong>{zip_name}</strong></label>
-        </div>
-        """, unsafe_allow_html=True)
-        checked = st.checkbox("選択", value=is_checked, key=cb_key)
-        if checked:
-            st.session_state.selected_files.add(zip_name)
-        else:
-            st.session_state.selected_files.discard(zip_name)
-st.markdown("</div>", unsafe_allow_html=True)
-
-# デバッグ表示
-st.markdown("---")
-st.write("🧪 デバッグ出力")
-st.write("選択されたZIP:", list(st.session_state.selected_files))
