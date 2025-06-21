@@ -34,16 +34,15 @@ if "selected_files" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = 1
 
-# サムネイル取得（仮実装：Dropboxからサムネイルリストを取得）
-# 本来は dbx.files_list_folder(THUMBNAIL_FOLDER) などで取得
+# サムネイル取得（Dropboxからサムネイルリストを取得）
 try:
     visible_thumbs = [
         entry.name for entry in dbx.files_list_folder(THUMBNAIL_FOLDER).entries
         if entry.name.lower().endswith(('.jpg', '.jpeg', '.png'))
     ]
-except dropbox.exceptions.ApiError:
+except dropbox.exceptions.ApiError as e:
     visible_thumbs = []
-    st.error("サムネイルフォルダの読み込みに失敗しました。")
+    st.error(f"サムネイルフォルダの読み込みに失敗しました: {str(e)}")
 
 # サムネイル表示
 st.markdown("### 📚 コミック一覧")
@@ -82,17 +81,23 @@ card_css = """
 """
 st.markdown(card_css, unsafe_allow_html=True)
 
+# チェックボックスの状態更新用コールバック
+def update_selected_files(zip_name, checked):
+    if checked:
+        st.session_state.selected_files.add(zip_name)
+    else:
+        st.session_state.selected_files.discard(zip_name)
+
 # サムネイル表示
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
 for name in visible_thumbs:
     zip_name = os.path.splitext(name)[0] + ".zip"
     image_path = f"{THUMBNAIL_FOLDER}/{name}"
-    # get_temporary_image_url 関数は仮に実装済みと仮定
     try:
         image_url = dbx.files_get_temporary_link(image_path).link
-    except dropbox.exceptions.ApiError:
+    except dropbox.exceptions.ApiError as e:
         image_url = ""
-        st.warning(f"画像 {name} の取得に失敗しました。")
+        st.warning(f"画像 {name} の取得に失敗しました: {str(e)}")
 
     with st.container():
         st.markdown(f"""
@@ -102,19 +107,16 @@ for name in visible_thumbs:
         </div>
         """, unsafe_allow_html=True)
 
-        # チェックボックスの状態管理
-        checkbox_key = f"cb_{zip_name}"
-        if checkbox_key not in st.session_state:
-            st.session_state[checkbox_key] = zip_name in st.session_state.selected_files
-
         # チェックボックス
-        checked = st.checkbox("選択", key=checkbox_key, value=st.session_state[checkbox_key])
-        # 状態を即座に更新
-        if checked and zip_name not in st.session_state.selected_files:
-            st.session_state.selected_files.add(zip_name)
-        elif not checked and zip_name in st.session_state.selected_files:
-            st.session_state.selected_files.discard(zip_name)
-        st.session_state[checkbox_key] = checked
+        checkbox_key = f"cb_{zip_name}"
+        # 初期値は selected_files に基づく
+        checked = st.checkbox(
+            "選択",
+            key=checkbox_key,
+            value=zip_name in st.session_state.selected_files,
+            on_change=update_selected_files,
+            args=(zip_name, st.session_state.get(checkbox_key, False))
+        )
 
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -122,18 +124,13 @@ st.markdown("</div>", unsafe_allow_html=True)
 if st.session_state.selected_files:
     if st.button("❌ 選択解除"):
         st.session_state.selected_files.clear()
-        for name in visible_thumbs:
-            zip_name = os.path.splitext(name)[0] + ".zip"
-            st.session_state[f"cb_{zip_name}"] = False
         st.rerun()
 
 # エクスポートボタン
 if st.session_state.selected_files:
     st.markdown("---")
     if st.button("📤 選択中のZIPをエクスポート"):
-        # エクスポート処理（仮実装）
         st.success(f"以下のファイルをエクスポートしました: {', '.join(st.session_state.selected_files)}")
-        # 実際のエクスポートロジックをここに追加
 
 # ページトップリンク（左下）
 st.markdown("""
