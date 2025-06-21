@@ -159,4 +159,13 @@ st.markdown("</div>", unsafe_allow_html=True)
 if st.session_state.selected_files:
     st.markdown("---")
     if st.button("📤 選択中のZIPをエクスポート"):
-        st.success("✅ エクスポート処理がここに実装されます（仮）")
+        logs = []
+        for zip_name in selection:
+            if zip_name in zip_paths:
+                if export_zip(zip_name, zip_paths[zip_name]):
+                    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    logs.append([now, user_name, zip_name])
+        if logs:
+            write_export_log(logs)
+            st.success(f"{len(logs)} 件をエクスポート＆ログ記録しました！")
+
