@@ -1,123 +1,168 @@
+import os
+import hashlib
+import difflib
 import streamlit as st
 import dropbox
-import hashlib
-import os
-import difflib
 
-# --- Dropbox認証 ---
+# Dropbox認証（Streamlit Secrets使用）
 dbx = dropbox.Dropbox(
     app_key=st.secrets["DROPBOX_APP_KEY"],
     app_secret=st.secrets["DROPBOX_APP_SECRET"],
     oauth2_refresh_token=st.secrets["DROPBOX_REFRESH_TOKEN"]
 )
 
-TARGET_FOLDER = st.secrets["TARGET_FOLDER"]
-EXPORT_FOLDER = st.secrets["EXPORT_FOLDER"]
-THUMBNAIL_FOLDER = st.secrets["THUMBNAIL_FOLDER"]
-ZIP_LIST_PATH = "zip_file_list.txt"  # GitHub上に配置した想定
+# パス設定
+TARGET_FOLDER = st.secrets["TARGET_FOLDER"]  # 例: "/成年コミック"
+THUMBNAIL_FOLDER = st.secrets["THUMBNAIL_FOLDER"]  # 例: "/サムネイル"
+EXPORT_FOLDER = st.secrets["EXPORT_FOLDER"]  # 例: "/SideBooksExport"
+ZIP_LIST_PATH = "https://raw.githubusercontent.com/＜あなたのユーザー名＞/＜リポジトリ名＞/main/zip_file_list.txt"
 
-# --- セッション初期化 ---
+# UI設定
+st.set_page_config(page_title="SideBooksエクスポート", layout="wide")
+st.markdown('<a id="top"></a>', unsafe_allow_html=True)
+
+# ステート初期化
 if "selected_files" not in st.session_state:
-    st.session_state.selected_files = []
+    st.session_state.selected_files = set()
+if "page" not in st.session_state:
+    st.session_state.page = 1
 
-# --- 安全なキー生成 ---
-def make_safe_key(name, fullpath):
-    return hashlib.md5(f"{name}_{fullpath}".encode()).hexdigest()
-
-# --- サムネイルパス取得 ---
-def get_thumbnail_path(name):
-    base = os.path.splitext(name)[0]
-    safe_name = base.replace("/", "_").replace("\\", "_")
-    return f"{THUMBNAIL_FOLDER}/{safe_name}.jpg"
-
-# --- zip_file_list.txtの読み込み ---
+# zip_file_list.txt の読み込み
+@st.cache_data
 def load_zip_file_list():
     try:
-        with open(ZIP_LIST_PATH, "r", encoding="utf-8") as f:
-            return [line.strip() for line in f.readlines() if line.strip()]
+        import requests
+        res = requests.get(ZIP_LIST_PATH)
+        res.raise_for_status()
+        return res.text.strip().splitlines()
     except Exception:
         st.error("zip_file_list.txt の取得に失敗しました。")
-        st.stop()
+        return []
 
-# --- エクスポートログ保存 ---
-def save_export_log(exported_list):
+# ユニークなキーを生成
+def make_safe_key(name, fullpath):
+    return hashlib.md5(f"{name}_{fullpath}".encode("utf-8")).hexdigest()
+
+# サムネイルの一時リンクを取得
+def get_thumbnail_link(filename):
     try:
-        log_path = os.path.join(TARGET_FOLDER, "export_log.csv")
-        log_text = "\n".join(exported_list)
-        dbx.files_upload(log_text.encode("utf-8"), log_path, mode=dropbox.files.WriteMode("overwrite"))
-    except Exception as e:
-        st.warning(f"エクスポートログの保存に失敗しました: {e}")
+        path = f"{THUMBNAIL_FOLDER}/{filename}"
+        link = dbx.files_get_temporary_link(path).link
+        return link
+    except:
+        return None
 
-# --- 近似ファイル検索 ---
-def find_similar_path(name, full_list):
-    matches = difflib.get_close_matches(name, full_list, n=1, cutoff=0.7)
-    return matches[0] if matches else None
-
-# --- エクスポート実行 ---
-def export_selected_files(selected, zip_paths):
-    # エクスポート先を毎回クリア
+# Dropbox内のエクスポートフォルダを空にする
+def clear_export_folder():
     try:
-        for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
-            dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
+        entries = dbx.files_list_folder(EXPORT_FOLDER).entries
+        for entry in entries:
+            dbx.files_delete_v2(entry.path_display)
     except Exception as e:
         st.warning(f"エクスポートフォルダの初期化に失敗: {e}")
 
+# エクスポート処理（近似検索付き）
+def export_selected_files(zip_paths):
     failed = []
-    for name in selected:
-        match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
-        if match:
-            try:
-                dbx.files_copy_v2(match, f"{EXPORT_FOLDER}/{name}", allow_shared_folder=True, autorename=True)
-            except Exception as e:
-                st.error(f"❌ {name} のコピーに失敗: {e}")
-                failed.append(name)
+    clear_export_folder()
+    for selected in st.session_state.selected_files:
+        found = [z for z in zip_paths if z.endswith(f"/{selected}")]
+        if found:
+            src_path = found[0]
         else:
-            st.error(f"❌ {name} のコピー元が見つかりませんでした。")
-            failed.append(name)
+            candidates = difflib.get_close_matches(
+                selected, [os.path.basename(z) for z in zip_paths], n=1, cutoff=0.7
+            )
+            if candidates:
+                matched = candidates[0]
+                matched_path = next((z for z in zip_paths if os.path.basename(z) == matched), None)
+                if matched_path:
+                    src_path = matched_path
+                else:
+                    failed.append(selected)
+                    continue
+            else:
+                failed.append(selected)
+                continue
+        try:
+            dest_path = f"{EXPORT_FOLDER}/{selected}"
+            dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+        except Exception as e:
+            st.error(f"❌ {selected} のコピーに失敗: {e}")
+            failed.append(selected)
+    return failed
 
-    if failed:
-        st.warning(f"{len(failed)} 件のエクスポートに失敗しました。")
-    else:
-        st.success("✅ エクスポートが完了しました。")
-
-    save_export_log(selected)
-
-# --- 一覧表示 ---
+# ZIPファイル一覧を表示
 def show_zip_file_list(zip_paths):
-    page_size = 30
-    total_pages = max(1, (len(zip_paths) - 1) // page_size + 1)
+    page_size = 200
+    max_page = max((len(zip_paths) - 1) // page_size + 1, 1)
+    page = st.number_input("ページ番号", min_value=1, max_value=max_page, step=1, value=st.session_state.page)
+    st.session_state.page = page
 
-    st.markdown("---")
-    page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1)
     start = (page - 1) * page_size
-    end = min(start + page_size, len(zip_paths))
+    end = start + page_size
+    entries = zip_paths[start:end]
 
-    for fullpath in zip_paths[start:end]:
-        name = os.path.basename(fullpath)
-        key = make_safe_key(name, fullpath)
-        cols = st.columns([1, 6])
-        with cols[0]:
-            checked = st.checkbox("選択", key=f"cb_{key}", value=(name in st.session_state.selected_files))
-            if checked and name not in st.session_state.selected_files:
-                st.session_state.selected_files.append(name)
-            elif not checked and name in st.session_state.selected_files:
-                st.session_state.selected_files.remove(name)
-        with cols[1]:
-            thumbnail_path = get_thumbnail_path(name)
-            st.image(thumbnail_path, caption=name, use_container_width=True)
+    st.markdown("### 📚 コミック一覧")
+    st.markdown(f"✅ 選択中: {len(st.session_state.selected_files)}")
 
-    st.markdown('<a href="#top">↑Top</a>', unsafe_allow_html=True)
+    if st.session_state.selected_files:
+        if st.button("📤 選択中のZIPをエクスポート", type="primary"):
+            with st.spinner("エクスポート中..."):
+                failed = export_selected_files(zip_paths)
+                if failed:
+                    st.warning(f"⚠ 一部失敗: {failed}")
+                else:
+                    st.success("✅ エクスポート完了！")
 
-# --- アプリ本体 ---
-st.set_page_config(page_title="SideBooks共有", layout="wide")
-st.markdown('<h1 id="top">📚 コミック一覧</h1>', unsafe_allow_html=True)
+    for full_path in entries:
+        name = os.path.basename(full_path)
+        thumb_candidates = [
+            name.replace(".zip", ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]
+        ]
+        image_url = None
+        for thumb in thumb_candidates:
+            link = get_thumbnail_link(thumb)
+            if link:
+                image_url = link
+                break
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if image_url:
+                st.image(image_url, caption=name, use_container_width=True)
+            else:
+                st.write("🔲 No thumbnail")
+        with col2:
+            key = make_safe_key(name, full_path)
+            checked = st.checkbox(name, key=f"cb_{key}", value=(name in st.session_state.selected_files))
+            if checked:
+                st.session_state.selected_files.add(name)
+            else:
+                st.session_state.selected_files.discard(name)
 
+    # TOPボタン
+    st.markdown("""
+    <a href="#top" class="top-button">↑ Top</a>
+    <style>
+    .top-button {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      background: #007bff;
+      color: white;
+      padding: 12px 20px;
+      font-size: 18px;
+      border-radius: 50px;
+      text-decoration: none;
+      z-index: 9999;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# アプリ本体
 zip_paths = load_zip_file_list()
-
-# エクスポートボタン（常時表示）
-st.markdown("### ✅選択中: " + str(len(st.session_state.selected_files)))
-if st.button("📤 選択中のZIPをエクスポート"):
-    export_selected_files(st.session_state.selected_files, zip_paths)
-
-# ZIPリスト表示
-show_zip_file_list(zip_paths)
+if zip_paths:
+    show_zip_file_list(zip_paths)
+else:
+    st.stop()
