@@ -191,7 +191,8 @@ for name in visible_thumbs:
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ✅ エクスポートボタン表示
-if selected_count > 0:
+# エクスポートボタン
+if st.session_state.selected_files:
+    st.markdown("---")
     if st.button("📤 選択中のZIPをエクスポート"):
-        st.success("エクスポート処理をここに実装予定です（仮）")
+        st.success("エクスポート処理をここに実装")
