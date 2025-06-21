@@ -87,11 +87,25 @@ start_idx = (page - 1) * PER_PAGE
 end_idx = start_idx + PER_PAGE
 visible_thumbs = sorted(thumbnails)[start_idx:end_idx]
 
-# ページトップリンク（左下 + サイズ大）
-top_link = """
-<a href='#top' style='position:fixed;bottom:30px;left:30px;background:#007bff;color:white;padding:15px 22px;font-size:1.5rem;border-radius:10px;text-decoration:none;z-index:9999;'>↑ Top</a>
-"""
-st.markdown("<div id='top'></div>", unsafe_allow_html=True)
+# ページトップリンク
+st.markdown("""
+<style>
+#top-button {
+  position: fixed;
+  bottom: 120px;
+  right: 20px;
+  z-index: 1000;
+  background-color: #007bff;
+  color: white;
+  padding: 12px 20px;
+  font-size: 18px;
+  border-radius: 10px;
+  text-decoration: none;
+}
+</style>
+<a href="#top" id="top-button">↑ Top</a>
+<div id='top'></div>
+""", unsafe_allow_html=True)
 
 # チェックボックスのトグル処理
 def toggle_selection(zip_name):
@@ -107,8 +121,7 @@ except Exception:
     st.warning("Dropboxの認証情報が不足しています")
     st.stop()
 
-# User-Agent取得（デバイス情報）
-user_agent = "unknown"  # User-Agent は取得不可のため仮設定
+user_agent = "unknown"
 
 # ヘッダー + エクスポートボタン（追従ヘッダー）
 st.markdown(f"""
@@ -132,7 +145,6 @@ st.markdown(f"""
   </div>
 """, unsafe_allow_html=True)
 
-# 選択済み表示・エクスポートボタン
 if st.session_state.selected_files:
     with st.container():
         st.markdown("### ✅ 選択されたZIPファイル：")
@@ -221,5 +233,3 @@ for thumb in visible_thumbs:
         )
 
         st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown(top_link, unsafe_allow_html=True)
