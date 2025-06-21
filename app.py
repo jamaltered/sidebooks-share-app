@@ -155,7 +155,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 # 「全選択解除」ボタン
 if st.session_state.selected_files:
     if st.button("❌ 選択解除"):
-        # チェック済みのkeyを削除する（強制的に再描画）
+        # チェックボックスのセッションキーを削除（＝次のフレームで初期状態になる）
         for zip_name in list(st.session_state.selected_files):
             cb_key = f"cb_{zip_name}"
             if cb_key in st.session_state:
