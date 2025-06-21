@@ -15,7 +15,7 @@ dbx = dropbox.Dropbox(
 TARGET_FOLDER = st.secrets["TARGET_FOLDER"]  # 例: "/成年コミック"
 THUMBNAIL_FOLDER = st.secrets["THUMBNAIL_FOLDER"]  # 例: "/サムネイル"
 EXPORT_FOLDER = st.secrets["EXPORT_FOLDER"]  # 例: "/SideBooksExport"
-ZIP_LIST_PATH = "https://raw.githubusercontent.com/＜あなたのユーザー名＞/＜リポジトリ名＞/main/zip_file_list.txt"
+ZIP_LIST_PATH = "https://github.com/jamaltered/sidebooks-share-app/blob/main/zip_file_list.txt"
 
 # UI設定
 st.set_page_config(page_title="SideBooksエクスポート", layout="wide")
