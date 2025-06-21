@@ -32,9 +32,9 @@ dbx = dropbox.Dropbox(
 )
 
 # フォルダ設定
-ZIP_SRC_FOLDER = "/成年コミック"
-ZIP_DEST_FOLDER = "/SideBooksExport"
+TARGET_FOLDER = "/成年コミック"
 THUMBNAIL_FOLDER = "/サムネイル"
+EXPORT_FOLDER = "/SideBooksExport"
 LOG_FOLDER = f"{THUMBNAIL_FOLDER}/ログ"
 
 # Streamlitページ設定
@@ -52,12 +52,13 @@ ITEMS_PER_PAGE = 100  # サムネイル表示数
 
 # サムネイル名加工関数
 def clean_filename(filename):
+    # 「（成年コミック）」を削除
     return re.sub(r'^（成年コミック）', '', filename)
 
-# サムネイル取得
+# サムネイル取得（全ファイルを取得）
 def list_all_thumbnail_files():
     thumbnails = []
-    excluded_files = []
+    excluded_files = []  # 除外されたファイルのログ
     try:
         result = dbx.files_list_folder(THUMBNAIL_FOLDER, recursive=False)
         entries = result.entries
@@ -67,14 +68,24 @@ def list_all_thumbnail_files():
         for entry in entries:
             if isinstance(entry, dropbox.files.FileMetadata):
                 name = entry.name
+                # ファイル名エンコーディング正規化
                 try:
                     name = name.encode('utf-8').decode('utf-8')
                 except UnicodeEncodeError:
                     excluded_files.append((name, "エンコーディングエラー"))
                     continue
+                # 拡張子チェック（非画像除外）
                 if (name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.JPG', '.JPEG', '.PNG', '.WEBP')) and
                     entry.size > 0):
-                    thumbnails.append(name)
+                    # MIMEタイプチェック（簡略化）
+                    try:
+                        metadata = dbx.files_get_metadata(entry.path_lower, include_media_info=True)
+                        if hasattr(metadata, 'media_info') and metadata.media_info:
+                            thumbnails.append(name)
+                        else:
+                            excluded_files.append((name, f"MIMEタイプ非画像: {metadata}"))
+                    except dropbox.exceptions.ApiError as e:
+                        excluded_files.append((name, f"メタデータ取得失敗: {str(e)}"))
                 else:
                     excluded_files.append((name, f"拡張子不正({name.split('.')[-1]})またはサイズ0({entry.size})"))
             else:
@@ -83,71 +94,61 @@ def list_all_thumbnail_files():
         # st.write(f"サムネイルフォルダの全ファイル ({len(entries)} 件):", [entry.name for entry in entries])
         # st.write(f"フィルタ後のサムネイル ({len(thumbnails)} 件):", thumbnails)
         # st.write(f"除外されたファイル ({len(excluded_files)} 件):", excluded_files)
-        thumbnails = sorted(thumbnails, key=lambda x: locale.strxfrm(x))
+    except dropbox.exceptions.AuthError as e:
+        st.error(f"Dropbox認証エラー: {str(e)}")
+        return []
+    except dropbox.exceptions.HttpError as e:
+        st.error(f"Dropbox通信エラー: {str(e)}")
+        return []
     except dropbox.exceptions.ApiError as e:
-        st.error(f"サムネイル取得エラー: {str(e)}")
+        st.error(f"サムネイルフォルダの読み込みに失敗しました: {str(e)}")
         return []
     return thumbnails
 
 # 一時リンク取得
 def get_temporary_image_url(path):
     try:
-        dbx.files_get_metadata(path)  # ファイル存在確認
         return dbx.files_get_temporary_link(path).link
-    except dropbox.exceptions.ApiError as e:
-        st.warning(f"画像取得失敗: {path} ({str(e)})")
+    except dropbox.exceptions.ApiError:
         return None
-
-# ZIPファイル一覧取得
-def get_zip_files():
-    zip_files = []
-    try:
-        result = dbx.files_list_folder(ZIP_SRC_FOLDER, recursive=False)
-        entries = result.entries
-        while result.has_more:
-            result = dbx.files_list_folder_continue(result.cursor)
-            entries.extend(result.entries)
-        zip_files = [entry.name for entry in entries if isinstance(entry, dropbox.files.FileMetadata)]
-    except dropbox.exceptions.ApiError as e:
-        st.error(f"ZIP元フォルダのファイル一覧取得に失敗: {str(e)}")
-        return []
-    return zip_files
 
 # エクスポート処理
 def export_files():
     try:
         # SideBooksExportフォルダをリセット
         try:
-            dbx.files_delete_v2(ZIP_DEST_FOLDER)
+            dbx.files_delete_v2(EXPORT_FOLDER)
         except dropbox.exceptions.ApiError:
-            pass
-        dbx.files_create_folder_v2(ZIP_DEST_FOLDER)
+            pass  # フォルダが存在しない場合は無視
+        dbx.files_create_folder_v2(EXPORT_FOLDER)
 
         # ログフォルダを作成
         try:
             dbx.files_create_folder_v2(LOG_FOLDER)
         except dropbox.exceptions.ApiError:
-            pass
+            pass  # フォルダが存在する場合は無視
 
         # 選択されたファイルをコピー
         exported_files = []
         for zip_name in st.session_state.selected_files:
             original_zip_name = f"（成年コミック）{zip_name}" if not zip_name.startswith("（成年コミック）") else zip_name
-            src_path = f"{ZIP_SRC_FOLDER}/{original_zip_name}"
-            dest_path = f"{ZIP_DEST_FOLDER}/{zip_name}"
+            src_path = f"{TARGET_FOLDER}/{original_zip_name}"
+            dst_path = f"{EXPORT_FOLDER}/{zip_name}"
             try:
-                dbx.files_get_metadata(src_path)
-                dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+                dbx.files_copy_v2(src_path, dst_path)
                 exported_files.append(zip_name)
             except dropbox.exceptions.ApiError as e:
-                st.error(f"❌ コピー失敗: {zip_name} (エラー: {str(e)})")
-                continue
+                st.warning(f"ファイル {zip_name} のコピーに失敗しました: {str(e)}")
 
         # ログ記録
         if exported_files:
             user_agent = st.context.headers.get("User-Agent", "unknown")
             ua = parse(user_agent)
-            device_info = f"iPhone_Safari_iOS_18.0" if ua else "unknown"
+            if ua:
+                device_info = f"{ua.device.family}_{ua.browser.family}_{ua.os.family}_{ua.os.version_string}".replace(" ", "_")
+                device_info = device_info if device_info != "Other_Unknown_Unknown_" else "unknown"
+            else:
+                device_info = "unknown"
             log_path = f"{LOG_FOLDER}/export_log_{datetime.now(timezone(timedelta(hours=9))).strftime('%Y-%m')}.csv"
             log_entry = {
                 "timestamp": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S"),
@@ -163,36 +164,23 @@ def export_files():
                 log_df = pd.concat([log_df, pd.DataFrame([log_entry])], ignore_index=True)
                 log_csv = log_df.to_csv(index=False).encode('utf-8')
                 dbx.files_upload(log_csv, log_path, mode=dropbox.files.WriteMode.overwrite)
-                st.success(f"✅ エクスポート完了: {len(exported_files)} 件成功")
+                st.success(f"以下のファイルをエクスポートしました: {', '.join(exported_files)}")
             except dropbox.exceptions.ApiError as e:
-                st.error(f"⚠️ ログ保存失敗: {str(e)}")
+                st.error(f"ログの保存に失敗しました: {str(e)}")
             st.session_state.selected_files.clear()
             st.rerun()
     except Exception as e:
         st.error(f"エクスポート処理中にエラーが発生しました: {str(e)}")
 
-# サムネイルとZIPファイルの取得
-all_thumbs = list_all_thumbnail_files()
-zip_files_in_source = get_zip_files()
-
-# サムネイルとZIPの一致フィルタ
-filtered_thumbs = []
-image_base_names = set(os.path.splitext(name)[0] for name in all_thumbs)
-zip_base_names = set(os.path.splitext(name)[0] for name in zip_files_in_source)
-for thumb in all_thumbs:
-    zip_name = os.path.splitext(thumb)[0] + ".zip"
-    original_zip_name = f"（成年コミック）{zip_name}" if not zip_name.startswith("（成年コミック）") else zip_name
-    if original_zip_name in zip_files_in_source:
-        filtered_thumbs.append(thumb)
-
-# ページネーション
-total_pages = (len(filtered_thumbs) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+# サムネイル一覧取得
+all_thumbnails = list_all_thumbnail_files()
+total_pages = (len(all_thumbnails) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
 start_idx = (st.session_state.page - 1) * ITEMS_PER_PAGE
-end_idx = min(start_idx + ITEMS_PER_PAGE, len(filtered_thumbs))
-visible_thumbs = filtered_thumbs[start_idx:end_idx]
+end_idx = min(start_idx + ITEMS_PER_PAGE, len(all_thumbnails))
+visible_thumbs = all_thumbnails[start_idx:end_idx]
 
 # サムネイル表示
-st.markdown(f"### 📚 コミック一覧 <span style='font-size: 14px; color: #666;'>（全 {len(filtered_thumbs)} 件）</span>", unsafe_allow_html=True)
+st.markdown(f"### 📚 コミック一覧 <span style='font-size: 14px; color: #666;'>（全 {len(all_thumbnails)} 件）</span>", unsafe_allow_html=True)
 
 # ページネーションUIとボタン
 col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 2, 2])
@@ -210,33 +198,21 @@ with col3:
             st.session_state.page += 1
             st.rerun()
 with col4:
-    if total_pages > 1:
-        selection = st.selectbox("ページ番号", list(range(1, total_pages + 1)), index=st.session_state.page - 1, key="page_select")
-        if selection != st.session_state.page:
-            st.session_state.page = selection
-            st.rerun()
-with col5:
     if st.session_state.selected_files:
         if st.button("❌ 選択解除", key="clear_button"):
             st.session_state.selected_files.clear()
             st.rerun()
+with col5:
+    if st.session_state.selected_files:
         if st.button("📤 選択中のZIPをエクスポート", key="export_button"):
             export_files()
 
 # 選択数
-st.markdown(f"<p>✅選択中: {len(st.session_state.selected_files)}</p>", unsafe_allow_html=True)
+selected_count = len(st.session_state.selected_files)
+st.markdown(f"<p>✅選択中: {selected_count}</p>", unsafe_allow_html=True)
 
-# 不一致ファイル表示
-unmatched_images = [name for name in image_base_names if name not in zip_base_names]
-unmatched_zips = [name for name in zip_base_names if name not in image_base_names]
-if unmatched_images:
-    st.markdown("### ❌ 画像はあるけどZIPがないファイル:")
-    for name in unmatched_images:
-        st.write("- ", name + ".jpg")
-if unmatched_zips:
-    st.markdown("### ❌ ZIPはあるけど画像がないファイル:")
-    for name in unmatched_zips:
-        st.write("- ", name + ".zip")
+# 区切り線
+st.markdown("---")
 
 # サムネイル表示レイアウトCSS
 card_css = """
@@ -252,6 +228,7 @@ card_css = """
     border-radius: 12px;
     text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
 }
 .card img {
     height: 200px;
@@ -288,22 +265,26 @@ st.markdown(card_css, unsafe_allow_html=True)
 
 # サムネイル表示
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
-for thumb in visible_thumbs:
-    clean_name = clean_filename(thumb)
-    zip_name = clean_filename(os.path.splitext(thumb)[0]) + ".zip"
-    display_zip_name = clean_filename(os.path.splitext(thumb)[0])
-    image_path = f"{THUMBNAIL_FOLDER}/{thumb}"
+for name in visible_thumbs:
+    clean_name = clean_filename(name)
+    zip_name = clean_filename(os.path.splitext(name)[0]) + ".zip"
+    display_zip_name = clean_filename(os.path.splitext(name)[0])
+    image_path = f"{THUMBNAIL_FOLDER}/{name}"
     image_url = get_temporary_image_url(image_path)
     
     with st.container():
         st.markdown(f"""
         <div class="card">
-            <img src="{image_url or 'https://via.placeholder.com/200x200?text=Image+Not+Found'}" alt="{display_zip_name}" />
+            <img src="{image_url or ''}" alt="{display_zip_name}" />
             <label><strong>{display_zip_name}</strong></label>
         </div>
         """, unsafe_allow_html=True)
-        checkbox_key = f"cb_{zip_name}_{st.session_state.page}_{thumb}_{uuid4()}"
-        checked = st.checkbox("選択", key=checkbox_key, value=zip_name in st.session_state.selected_files)
+        checkbox_key = f"cb_{zip_name}_{st.session_state.page}_{name}_{uuid4()}"
+        checked = st.checkbox(
+            "選択",
+            key=checkbox_key,
+            value=zip_name in st.session_state.selected_files
+        )
         if checked:
             st.session_state.selected_files.add(zip_name)
         else:
@@ -334,8 +315,3 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
-
-# デバッグ出力
-st.markdown("---")
-st.write("🧪 デバッグ出力")
-st.write("選択されたZIP:", list(st.session_state.selected_files))
