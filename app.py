@@ -33,7 +33,6 @@ if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
-selected_count = len(st.session_state.selected_files)
 
 # サムネイル取得・ページ処理
 def list_zip_files():
@@ -136,7 +135,6 @@ st.markdown("""
 
 # サムネイル表示
 st.markdown("### 📚 コミック一覧")
-st.markdown(f"<p>✅選択中: {selected_count}</p>", unsafe_allow_html=True)
 
 # サムネイル表示レイアウト
 card_css = """
@@ -168,10 +166,12 @@ card_css = """
 """
 st.markdown(card_css, unsafe_allow_html=True)
 
+# UIの描画と状態更新を分離
+selected_now = set()
+
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
 for name in visible_thumbs:
     zip_name = os.path.splitext(name)[0] + ".zip"
-    is_selected = zip_name in st.session_state.selected_files
     image_path = f"{THUMBNAIL_FOLDER}/{name}"
     image_url = get_temporary_image_url(image_path)
 
@@ -183,10 +183,11 @@ for name in visible_thumbs:
             <label><strong>{zip_name}</strong></label>
         </div>
         """, unsafe_allow_html=True)
-        checked = st.checkbox("選択", value=is_selected, key=zip_name)
-        if checked:
-            st.session_state.selected_files.add(zip_name)
-        else:
-            st.session_state.selected_files.discard(zip_name)
+        if st.checkbox("選択", value=(zip_name in st.session_state.selected_files), key=zip_name):
+            selected_now.add(zip_name)
 
 st.markdown("</div>", unsafe_allow_html=True)
+
+# 選択更新と表示
+st.session_state.selected_files = selected_now
+st.markdown(f"<p>✅選択中: {len(selected_now)}</p>", unsafe_allow_html=True)
