@@ -2,6 +2,8 @@ import os
 import re
 import dropbox
 import streamlit as st
+import pandas as pd
+from datetime import datetime
 from dotenv import load_dotenv
 
 # 環境変数の読み込み
@@ -23,6 +25,7 @@ THUMBNAIL_FOLDER = "/サムネイル"
 EXPORT_FOLDER = "/SideBooksExport"
 LOG_PATH = f"{THUMBNAIL_FOLDER}/export_log.csv"
 
+# Streamlitページ設定
 st.set_page_config(page_title="コミック一覧", layout="wide")
 
 # アンカー用トークンをページトップに設置
@@ -33,8 +36,9 @@ if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
+ITEMS_PER_PAGE = 20
 
-# サムネイル取得（Dropboxからサムネイルリストを取得）
+# サムネイル取得
 try:
     visible_thumbs = [
         entry.name for entry in dbx.files_list_folder(THUMBNAIL_FOLDER).entries
@@ -43,6 +47,13 @@ try:
 except dropbox.exceptions.ApiError as e:
     visible_thumbs = []
     st.error(f"サムネイルフォルダの読み込みに失敗しました: {str(e)}")
+
+# ページネーション
+total_items = len(visible_thumbs)
+total_pages = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+start_idx = (st.session_state.page - 1) * ITEMS_PER_PAGE
+end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
+current_thumbs = visible_thumbs[start_idx:end_idx]
 
 # サムネイル表示
 st.markdown("### 📚 コミック一覧")
@@ -81,16 +92,62 @@ card_css = """
 """
 st.markdown(card_css, unsafe_allow_html=True)
 
-# チェックボックスの状態更新用コールバック
-def update_selected_files(zip_name, checked):
-    if checked:
-        st.session_state.selected_files.add(zip_name)
-    else:
-        st.session_state.selected_files.discard(zip_name)
+# エクスポート処理
+def export_files():
+    try:
+        # SideBooksExportフォルダをリセット
+        try:
+            dbx.files_delete_v2(EXPORT_FOLDER)
+        except dropbox.exceptions.ApiError:
+            pass  # フォルダが存在しない場合は無視
+        dbx.files_create_folder_v2(EXPORT_FOLDER)
+
+        # 選択されたファイルを移動
+        exported_files = []
+        for zip_name in st.session_state.selected_files:
+            src_path = f"{TARGET_FOLDER}/{zip_name}"
+            dst_path = f"{EXPORT_FOLDER}/{zip_name}"
+            try:
+                dbx.files_move_v2(src_path, dst_path)
+                exported_files.append(zip_name)
+            except dropbox.exceptions.ApiError as e:
+                st.warning(f"ファイル {zip_name} の移動に失敗しました: {str(e)}")
+
+        # ログ記録
+        if exported_files:
+            log_entry = {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "user": st.session_state.get("username", "unknown"),
+                "files": ", ".join(exported_files)
+            }
+            try:
+                # 既存ログを読み込み（存在する場合）
+                try:
+                    log_file = dbx.files_download(LOG_PATH)[1].content
+                    log_df = pd.read_csv(log_file)
+                except dropbox.exceptions.ApiError:
+                    log_df = pd.DataFrame(columns=["timestamp", "user", "files"])
+                
+                # 新しいログを追加
+                log_df = pd.concat([log_df, pd.DataFrame([log_entry])], ignore_index=True)
+                
+                # CSVとして保存
+                log_csv = log_df.to_csv(index=False).encode('utf-8')
+                dbx.files_upload(log_csv, LOG_PATH, mode=dropbox.files.WriteMode.overwrite)
+                
+                st.success(f"以下のファイルをエクスポートしました: {', '.join(exported_files)}")
+            except dropbox.exceptions.ApiError as e:
+                st.error(f"ログの保存に失敗しました: {str(e)}")
+            
+            # 選択状態をリセット
+            st.session_state.selected_files.clear()
+            st.rerun()
+    except Exception as e:
+        st.error(f"エクスポート処理中にエラーが発生しました: {str(e)}")
 
 # サムネイル表示
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
-for name in visible_thumbs:
+for name in current_thumbs:
     zip_name = os.path.splitext(name)[0] + ".zip"
     image_path = f"{THUMBNAIL_FOLDER}/{name}"
     try:
@@ -108,17 +165,34 @@ for name in visible_thumbs:
         """, unsafe_allow_html=True)
 
         # チェックボックス
-        checkbox_key = f"cb_{zip_name}"
-        # 初期値は selected_files に基づく
+        checkbox_key = f"cb_{zip_name}_{start_idx}_{name}"  # ページごとに一意なキー
         checked = st.checkbox(
             "選択",
             key=checkbox_key,
-            value=zip_name in st.session_state.selected_files,
-            on_change=update_selected_files,
-            args=(zip_name, st.session_state.get(checkbox_key, False))
+            value=zip_name in st.session_state.selected_files
         )
+        if checked:
+            st.session_state.selected_files.add(zip_name)
+        else:
+            st.session_state.selected_files.discard(zip_name)
 
 st.markdown("</div>", unsafe_allow_html=True)
+
+# ページネーションコントロール
+if total_pages > 1:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.session_state.page > 1:
+            if st.button("前へ"):
+                st.session_state.page -= 1
+                st.rerun()
+    with col2:
+        st.write(f"ページ {st.session_state.page} / {total_pages}")
+    with col3:
+        if st.session_state.page < total_pages:
+            if st.button("次へ"):
+                st.session_state.page += 1
+                st.rerun()
 
 # 「全選択解除」ボタン
 if st.session_state.selected_files:
@@ -130,9 +204,9 @@ if st.session_state.selected_files:
 if st.session_state.selected_files:
     st.markdown("---")
     if st.button("📤 選択中のZIPをエクスポート"):
-        st.success(f"以下のファイルをエクスポートしました: {', '.join(st.session_state.selected_files)}")
+        export_files()
 
-# ページトップリンク（左下）
+# ページトップリンク
 st.markdown("""
 <a href="#top" class="top-button">↑ Top</a>
 <style>
