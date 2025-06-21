@@ -5,7 +5,10 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from user_agents import parse
+try:
+    from user_agents import parse
+except ImportError:
+    def parse(user_agent): return None  # フォールバック
 import locale
 
 # 日本語ロケールを設定（50音順ソート用）
@@ -186,12 +189,16 @@ def export_files():
             # User-Agentからデバイス情報を取得
             user_agent = st.context.headers.get("User-Agent", "unknown")
             ua = parse(user_agent)
-            device_info = f"{ua.device.family}_{ua.browser.family}_{ua.os.family}_{ua.os.version_string}".replace(" ", "_")
+            if ua:
+                device_info = f"{ua.device.family}_{ua.browser.family}_{ua.os.family}_{ua.os.version_string}".replace(" ", "_")
+                device_info = device_info if device_info != "Other_Unknown_Unknown_" else "unknown"
+            else:
+                device_info = "unknown"
             # 月ごとのログファイルパス
             log_path = f"{LOG_FOLDER}/export_log_{datetime.now(timezone(timedelta(hours=9))).strftime('%Y-%m')}.csv"
             log_entry = {
                 "timestamp": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S"),  # JST
-                "user": device_info if device_info != "Other_Unknown_Unknown_" else "unknown",
+                "user": device_info,
                 "files": ", ".join(exported_files)
             }
             try:
