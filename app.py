@@ -67,20 +67,17 @@ thumbnails = list_thumbnails()
 zip_set = {entry.name for entry in zip_files}
 
 # ページネーション
-PER_PAGE = 500
+PER_PAGE = 200
 max_pages = (len(thumbnails) + PER_PAGE - 1) // PER_PAGE
 if "page" not in st.session_state:
     st.session_state.page = 1
-
-def jump_to_page(num):
-    st.session_state.page = num
 
 col1, col2, col3 = st.columns([1, 2, 1])
 with col1:
     if st.button("⬅ 前へ") and st.session_state.page > 1:
         st.session_state.page -= 1
 with col2:
-    st.selectbox("ページ番号", options=list(range(1, max_pages + 1)), key="page", on_change=jump_to_page, args=(st.session_state.page,))
+    st.selectbox("ページ番号", options=list(range(1, max_pages + 1)), key="page")
 with col3:
     if st.button("次へ ➡") and st.session_state.page < max_pages:
         st.session_state.page += 1
@@ -90,24 +87,11 @@ start_idx = (page - 1) * PER_PAGE
 end_idx = start_idx + PER_PAGE
 visible_thumbs = sorted(thumbnails)[start_idx:end_idx]
 
-# ページトップリンク
-st.markdown("""
-<a href='#top' style='
-  position:fixed;
-  bottom:20px;
-  right:20px;
-  background:#007bff;
-  color:#fff;
-  padding:10px 16px;
-  border-radius:30px;
-  font-size:14px;
-  font-weight:bold;
-  text-decoration:none;
-  z-index:9999;
-  box-shadow: 0 0 10px rgba(0,0,0,0.3);
-'>↑ Top</a>
-<div id='top'></div>
-""", unsafe_allow_html=True)
+# ページトップリンク（左下 + サイズ大）
+top_link = """
+<a href='#top' style='position:fixed;bottom:30px;left:30px;background:#007bff;color:white;padding:15px 22px;font-size:1.5rem;border-radius:10px;text-decoration:none;z-index:9999;'>↑ Top</a>
+"""
+st.markdown("<div id='top'></div>", unsafe_allow_html=True)
 
 # チェックボックスのトグル処理
 def toggle_selection(zip_name):
@@ -222,7 +206,7 @@ for thumb in visible_thumbs:
         checkbox_id = f"checkbox_{zip_name}"
         st.markdown(f"""
         <div style='background-color:#fff; border-radius:10px; padding:10px; margin:10px 0; box-shadow:0 0 6px rgba(0,0,0,0.1);'>
-            <img src='{url}' style='width:100%; max-height:500px; object-fit:cover; border-radius:6px;' />
+            <img src='{url}' style='width:100%; height:auto; border-radius:6px;' />
             <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
               {title_display}
             </div>
@@ -237,3 +221,5 @@ for thumb in visible_thumbs:
         )
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown(top_link, unsafe_allow_html=True)
