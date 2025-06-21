@@ -29,7 +29,7 @@ if "selected_files" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = 1
 
-# サムネイル取得（media_infoではなく拡張子＋サイズで判定）
+# サムネイル取得
 def list_all_thumbnail_files():
     thumbnails = []
     try:
@@ -138,7 +138,7 @@ for thumb in visible_thumbs:
     zip_name = os.path.splitext(thumb)[0] + ".zip"
     image_path = f"{THUMBNAIL_FOLDER}/{thumb}"
     image_url = get_temporary_image_url(image_path)
-    cb_key = f"cb_{zip_name}"
+    cb_key = f"cb_{zip_name}_{thumb}"
     is_checked = zip_name in st.session_state.selected_files
 
     with st.container():
@@ -155,8 +155,67 @@ for thumb in visible_thumbs:
             st.session_state.selected_files.discard(zip_name)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# エクスポート処理UI
-if st.session_state.selected_files:
-    st.markdown("---")
-    if st.button("📤 選択中のZIPをエクスポート"):
-        st.success("✅ エクスポート処理がここに実装されます（仮）")
+# エクスポート処理UI（常時表示、未選択時は無効）
+st.markdown("---")
+export_disabled = not st.session_state.selected_files
+import platform
+from datetime import datetime
+
+if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabled):
+    ZIP_SRC_FOLDER = "/成年コミック"
+    ZIP_DEST_FOLDER = "/sidebooksexport"
+    LOG_PATH = f"{ZIP_DEST_FOLDER}/export_log.csv"
+
+    device = platform.node()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    success_count = 0
+    fail_count = 0
+    log_lines = []
+
+    # ✅ 既存のエクスポート先ZIPファイルを全削除
+    try:
+        result = dbx.files_list_folder(ZIP_DEST_FOLDER)
+        for entry in result.entries:
+            if isinstance(entry, dropbox.files.FileMetadata) and entry.name.lower().endswith(".zip"):
+                dbx.files_delete_v2(entry.path_lower)
+    except dropbox.exceptions.ApiError as e:
+        st.warning(f"⚠️ 既存ファイルの削除に失敗: {e}")
+
+    # ✅ 選択ファイルのコピー処理
+    for zip_name in st.session_state.selected_files:
+        src_path = f"{ZIP_SRC_FOLDER}/{zip_name}"
+        dest_path = f"{ZIP_DEST_FOLDER}/{zip_name}"
+        try:
+            dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+            log_lines.append(f"{timestamp},{device},{zip_name}")
+            success_count += 1
+        except dropbox.exceptions.ApiError as e:
+            st.error(f"❌ {zip_name} のコピーに失敗: {e}")
+            fail_count += 1
+
+    # ✅ ログ追記（CSV形式）
+    try:
+        existing_log = ""
+        try:
+            _, res = dbx.files_download(LOG_PATH)
+            existing_log = res.content.decode("utf-8")
+        except dropbox.exceptions.ApiError:
+            existing_log = "timestamp,device,file\n"  # 初回ヘッダー
+
+        new_log = existing_log + "\n".join(log_lines) + "\n"
+        dbx.files_upload(
+            new_log.encode("utf-8"),
+            LOG_PATH,
+            mode=dropbox.files.WriteMode.overwrite
+        )
+    except Exception as e:
+        st.error(f"⚠️ ログファイルの更新に失敗しました: {e}")
+
+    st.success(f"✅ エクスポート完了: {success_count} 件成功、{fail_count} 件失敗")
+
+
+# デバッグ表示（必要なら削除してOK）
+st.markdown("---")
+st.write("🧪 デバッグ出力")
+st.write("選択されたZIP:", list(st.session_state.selected_files))
