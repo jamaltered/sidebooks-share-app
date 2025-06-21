@@ -326,4 +326,16 @@ st.markdown("""
     border-radius: 50px;
     text-decoration: none;
     z-index: 9999;
-    box-shadow: 0 2px 6px rgba(0,0,0
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.top-button:hover {
+    background: #333333;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# デバッグ出力
+st.markdown("---")
+st.write("🧪 デバッグ出力")
+st.write("選択されたZIP:", list(st.session_state.selected_files))
