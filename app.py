@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+from uuid import uuid4
 try:
     from user_agents import parse
 except ImportError:
@@ -47,7 +48,7 @@ if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
-ITEMS_PER_PAGE = 20
+ITEMS_PER_PAGE = 100  # サムネイル表示数を100件に変更
 
 # サムネイル名加工関数
 def clean_filename(filename):
@@ -62,7 +63,7 @@ try:
         if isinstance(entry, dropbox.files.FileMetadata) and
         entry.name.lower().endswith(('.jpg', '.jpeg', '.png'))
     ]
-    # デバッグ用: 全ファイルリストを表示（本番ではコメントアウト）
+    # デバッグ用: 全ファイルとフィルタ後のリスト（本番ではコメントアウト）
     # st.write("サムネイルフォルダの全ファイル:", [entry.name for entry in all_files])
     # st.write("フィルタ後のサムネイル:", visible_thumbs)
     # アルファベット優先、50音順でソート
@@ -129,6 +130,7 @@ card_css = """
     border-radius: 12px;
     text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative; /* チェックボックス位置調整 */
 }
 .card img {
     height: 200px;
@@ -140,6 +142,10 @@ card_css = """
     display: block;
     margin-bottom: 8px;
     word-wrap: break-word;
+}
+.stCheckbox {
+    z-index: 10; /* チェックボックスがクリック可能 */
+    position: relative;
 }
 button[kind="primary"] {
     background-color: #000000 !important;
@@ -233,15 +239,6 @@ def export_files():
     except Exception as e:
         st.error(f"エクスポート処理中にエラーが発生しました: {str(e)}")
 
-# チェックボックス更新コールバック
-def update_checkbox(zip_name, checked):
-    if checked:
-        st.session_state.selected_files.add(zip_name)
-    else:
-        st.session_state.selected_files.discard(zip_name)
-    # デバッグ用: コールバック後の状態を表示（本番ではコメントアウト）
-    # st.write(f"チェックボックス更新: {zip_name}, 状態: {checked}, 選択ファイル: {st.session_state.selected_files}")
-
 # サムネイル表示
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
 for name in current_thumbs:
@@ -252,57 +249,4 @@ for name in current_thumbs:
     image_path = f"{THUMBNAIL_FOLDER}/{name}"
     try:
         image_url = dbx.files_get_temporary_link(image_path).link
-    except dropbox.exceptions.ApiError as e:
-        image_url = ""
-        st.warning(f"画像 {name} の取得に失敗しました: {str(e)}")
-
-    with st.container():
-        st.markdown(f"""
-        <div class="card">
-            <img src="{image_url}" alt="{display_zip_name}" />
-            <label><strong>{display_zip_name}</strong></label>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # チェックボックス（キー強化）
-        checkbox_key = f"cb_{zip_name}_{st.session_state.page}_{name}_{start_idx}"
-        checked = st.checkbox(
-            "選択",
-            key=checkbox_key,
-            value=zip_name in st.session_state.selected_files,
-            on_change=update_checkbox,
-            args=(zip_name, None)  # None は後で checked に置き換わる
-        )
-        # コールバックが即時反映されない場合のフォールバック
-        if checked != (zip_name in st.session_state.selected_files):
-            update_checkbox(zip_name, checked)
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ページトップリンク
-st.markdown("""
-<a href="#top" class="top-button">↑ Top</a>
-<style>
-.top-button {
-    position: fixed;
-    bottom: 24px;
-    left: 24px;
-    background: #000000;
-    color: white !important;
-    padding: 14px 20px;
-    font-size: 20px;
-    border-radius: 50px;
-    text-decoration: none;
-    z-index: 9999;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-    /* 提案: フォントサイズを18pxに */
-    /* font-size: 18px !important; */
-    /* 提案: 角の丸みを8pxに */
-    /* border-radius: 8px !important; */
-}
-.top-button:hover {
-    background: #333333;
-    color: white !important;
-}
-</style>
-""", unsafe_allow_html=True)
+    except dropbox
