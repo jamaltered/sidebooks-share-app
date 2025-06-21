@@ -116,11 +116,11 @@ st.markdown("""
 .top-button {
   position: fixed;
   bottom: 24px;
-  left: 24px;
+  right: 24px;
   background: #007bff;
   color: white;
-  padding: 14px 20px;
-  font-size: 20px;
+  padding: 18px 28px;
+  font-size: 22px;
   border-radius: 50px;
   text-decoration: none;
   z-index: 9999;
@@ -129,4 +129,57 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 以下略（既存の画像表示ロジックなど）
+# サムネイル表示
+st.markdown("### 📚 コミック一覧")
+st.markdown(f"<p>✅選択中: {selected_count}</p>", unsafe_allow_html=True)
+
+# サムネイル表示レイアウト
+card_css = """
+<style>
+.card-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 20px;
+}
+.card {
+    background: white;
+    padding: 12px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.card img {
+    height: 200px;
+    object-fit: contain;
+    margin-bottom: 10px;
+}
+.card label {
+    font-size: 14px;
+    display: block;
+    margin-bottom: 8px;
+    word-wrap: break-word;
+}
+</style>
+"""
+st.markdown(card_css, unsafe_allow_html=True)
+
+st.markdown('<div class="card-container">', unsafe_allow_html=True)
+for name in visible_thumbs:
+    zip_name = os.path.splitext(name)[0] + ".zip"
+    is_selected = zip_name in st.session_state.selected_files
+    image_path = f"{THUMBNAIL_FOLDER}/{name}"
+    image_url = get_temporary_image_url(image_path)
+
+    # 各カード
+    st.markdown(f"""
+    <div class="card">
+        <img src="{image_url}" alt="{zip_name}" />
+        <label><strong>{zip_name}</strong></label>
+        <input type="checkbox" onchange="fetch('', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{'selected': '{zip_name}', 'checked': this.checked}})
+        }})" {'checked' if is_selected else ''}>
+    </div>
+    """, unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
