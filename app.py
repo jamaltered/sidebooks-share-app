@@ -14,8 +14,8 @@ APP_KEY = os.getenv("DROPBOX_APP_KEY")
 APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
 REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
 
-ZIP_SRC_FOLDER = "/ZIP元フォルダ"
-ZIP_DEST_FOLDER = "/ZIP出力先"
+ZIP_SRC_FOLDER = "/成年コミック"
+ZIP_DEST_FOLDER = "/SideBooksExport"
 LOG_PATH = "/log/export_log.csv"
 
 dbx = dropbox.Dropbox(
