@@ -25,6 +25,9 @@ LOG_PATH = f"{THUMBNAIL_FOLDER}/export_log.csv"
 
 st.set_page_config(page_title="コミック一覧", layout="wide")
 
+# アンカー用トークンをページトップに設置
+st.markdown('<a id="top"></a>', unsafe_allow_html=True)
+
 # 初期状態
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
@@ -93,16 +96,18 @@ st.markdown("""
 <div class="page-controls">
 """, unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([1, 2, 1])
+col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
 with col1:
     if st.button("⬅ 前へ") and st.session_state.page > 1:
         st.session_state.page -= 1
 with col2:
-    page_selection = st.selectbox("ページ番号", list(range(1, max_pages + 1)), index=st.session_state.page - 1)
-    st.session_state.page = page_selection
+    st.markdown(f"**{st.session_state.page} / {max_pages}**")
 with col3:
     if st.button("次へ ➡") and st.session_state.page < max_pages:
         st.session_state.page += 1
+with col4:
+    page_selection = st.selectbox("ページ番号", list(range(1, max_pages + 1)), index=st.session_state.page - 1)
+    st.session_state.page = page_selection
 
 page = st.session_state.page
 start_idx = (page - 1) * PER_PAGE
@@ -116,11 +121,11 @@ st.markdown("""
 .top-button {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 24px;
   background: #007bff;
   color: white;
-  padding: 18px 28px;
-  font-size: 22px;
+  padding: 14px 20px;
+  font-size: 20px;
   border-radius: 50px;
   text-decoration: none;
   z-index: 9999;
@@ -171,15 +176,17 @@ for name in visible_thumbs:
     image_url = get_temporary_image_url(image_path)
 
     # 各カード
-    st.markdown(f"""
-    <div class="card">
-        <img src="{image_url}" alt="{zip_name}" />
-        <label><strong>{zip_name}</strong></label>
-        <input type="checkbox" onchange="fetch('', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{'selected': '{zip_name}', 'checked': this.checked}})
-        }})" {'checked' if is_selected else ''}>
-    </div>
-    """, unsafe_allow_html=True)
+    with st.container():
+        st.markdown(f"""
+        <div class="card">
+            <img src="{image_url}" alt="{zip_name}" />
+            <label><strong>{zip_name}</strong></label>
+        </div>
+        """, unsafe_allow_html=True)
+        checked = st.checkbox("選択", value=is_selected, key=zip_name)
+        if checked:
+            st.session_state.selected_files.add(zip_name)
+        else:
+            st.session_state.selected_files.discard(zip_name)
+
 st.markdown("</div>", unsafe_allow_html=True)
