@@ -216,4 +216,114 @@ with col4:
             st.session_state.page = selection
             st.rerun()
 with col5:
-    if st.session_state.selected
+    if st.session_state.selected_files:
+        if st.button("❌ 選択解除", key="clear_button"):
+            st.session_state.selected_files.clear()
+            st.rerun()
+        if st.button("📤 選択中のZIPをエクスポート", key="export_button"):
+            export_files()
+
+# 選択数
+st.markdown(f"<p>✅選択中: {len(st.session_state.selected_files)}</p>", unsafe_allow_html=True)
+
+# 不一致ファイル表示
+unmatched_images = [name for name in image_base_names if name not in zip_base_names]
+unmatched_zips = [name for name in zip_base_names if name not in image_base_names]
+if unmatched_images:
+    st.markdown("### ❌ 画像はあるけどZIPがないファイル:")
+    for name in unmatched_images:
+        st.write("- ", name + ".jpg")
+if unmatched_zips:
+    st.markdown("### ❌ ZIPはあるけど画像がないファイル:")
+    for name in unmatched_zips:
+        st.write("- ", name + ".zip")
+
+# サムネイル表示レイアウトCSS
+card_css = """
+<style>
+.card-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 横2列 */
+    gap: 20px;
+}
+.card {
+    background: white;
+    padding: 12px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.card img {
+    height: 200px;
+    object-fit: contain;
+    margin-bottom: 10px;
+}
+.card label {
+    font-size: 14px;
+    display: block;
+    margin-bottom: 8px;
+    word-wrap: break-word;
+}
+.stCheckbox {
+    z-index: 10;
+    position: relative;
+    margin-top: 8px;
+}
+button[kind="primary"] {
+    background-color: #000000 !important;
+    color: #FFFFFF !important;
+}
+button[kind="primary"]:hover {
+    background-color: #333333 !important;
+    color: #FFFFFF !important;
+}
+@media (max-width: 320px) {
+    .card-container {
+        grid-template-columns: 1fr; /* 極小画面では1列 */
+    }
+}
+</style>
+"""
+st.markdown(card_css, unsafe_allow_html=True)
+
+# サムネイル表示
+st.markdown('<div class="card-container">', unsafe_allow_html=True)
+for thumb in visible_thumbs:
+    clean_name = clean_filename(thumb)
+    zip_name = clean_filename(os.path.splitext(thumb)[0]) + ".zip"
+    display_zip_name = clean_filename(os.path.splitext(thumb)[0])
+    image_path = f"{THUMBNAIL_FOLDER}/{thumb}"
+    image_url = get_temporary_image_url(image_path)
+    
+    with st.container():
+        st.markdown(f"""
+        <div class="card">
+            <img src="{image_url or 'https://via.placeholder.com/200x200?text=Image+Not+Found'}" alt="{display_zip_name}" />
+            <label><strong>{display_zip_name}</strong></label>
+        </div>
+        """, unsafe_allow_html=True)
+        checkbox_key = f"cb_{zip_name}_{st.session_state.page}_{thumb}_{uuid4()}"
+        checked = st.checkbox("選択", key=checkbox_key, value=zip_name in st.session_state.selected_files)
+        if checked:
+            st.session_state.selected_files.add(zip_name)
+        else:
+            st.session_state.selected_files.discard(zip_name)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ページトップボタン
+st.markdown("""
+<a href="#top" class="top-button">↑ Top</a>
+<style>
+.top-button {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    background: #000000;
+    color: white !important;
+    padding: 14px 20px;
+    font-size: 20px;
+    border-radius: 50px;
+    text-decoration: none;
+    z-index: 9999;
+    box-shadow: 0 2px 6px rgba(0,0,0
