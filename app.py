@@ -48,29 +48,72 @@ if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
-ITEMS_PER_PAGE = 100  # サムネイル表示数を100件
+ITEMS_PER_PAGE = 100  # サムネイル表示数
 
 # サムネイル名加工関数
 def clean_filename(filename):
     # 「（成年コミック）」を削除
     return re.sub(r'^（成年コミック）', '', filename)
 
-# サムネイル取得
+# サムネイル取得（全ファイルを取得）
+def get_all_files(folder_path):
+    all_files = []
+    try:
+        result = dbx.files_list_folder(folder_path, recursive=False)
+        all_files.extend(result.entries)
+        while result.has_more:
+            result = dbx.files_list_folder_continue(result.cursor)
+            all_files.extend(result.entries)
+        return all_files
+    except dropbox.exceptions.AuthError as e:
+        st.error(f"Dropbox認証エラー: {str(e)}")
+        return []
+    except dropbox.exceptions.HttpError as e:
+        st.error(f"Dropbox通信エラー: {str(e)}")
+        return []
+    except dropbox.exceptions.ApiError as e:
+        st.error(f"サムネイルフォルダの読み込みに失敗しました: {str(e)}")
+        return []
+
 try:
-    all_files = dbx.files_list_folder(THUMBNAIL_FOLDER, recursive=False).entries
-    visible_thumbs = [
-        entry.name for entry in all_files
-        if isinstance(entry, dropbox.files.FileMetadata) and
-        entry.name.lower().endswith(('.jpg', '.jpeg', '.png'))
-    ]
-    # デバッグ用: 全ファイルとフィルタ後のリスト（本番ではコメントアウト）
-    # st.write("サムネイルフォルダの全ファイル:", [entry.name for entry in all_files])
-    # st.write("フィルタ後のサムネイル:", visible_thumbs)
+    all_files = get_all_files(THUMBNAIL_FOLDER)
+    excluded_files = []  # 除外されたファイルのログ
+    visible_thumbs = []
+    for entry in all_files:
+        if isinstance(entry, dropbox.files.FileMetadata):
+            name = entry.name
+            # ファイル名エンコーディング正規化
+            try:
+                name = name.encode('utf-8').decode('utf-8')
+            except UnicodeEncodeError:
+                excluded_files.append((name, "エンコーディングエラー"))
+                continue
+            # 拡張子とサイズチェック
+            if (name.lower().endswith(('.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG')) and
+                entry.size > 0):
+                # MIMEタイプチェック
+                try:
+                    metadata = dbx.files_get_metadata(entry.path_lower, include_media_info=True)
+                    if hasattr(metadata, 'media_info') and metadata.media_info and \
+                       metadata.media_info.metadata.get('dimensions') is not None:
+                        visible_thumbs.append(name)
+                    else:
+                        excluded_files.append((name, f"MIMEタイプ非画像またはメタデータ欠如: {metadata}"))
+                except dropbox.exceptions.ApiError as e:
+                    excluded_files.append((name, f"メタデータ取得失敗: {str(e)}"))
+            else:
+                excluded_files.append((name, f"拡張子不正({name.split('.')[-1]})またはサイズ0({entry.size})"))
+        else:
+            excluded_files.append((entry.name, "ファイルでない"))
+    # デバッグ用: 有効化して原因確認
+    st.write(f"サムネイルフォルダの全ファイル ({len(all_files)} 件):", [entry.name for entry in all_files])
+    st.write(f"フィルタ後のサムネイル ({len(visible_thumbs)} 件):", visible_thumbs)
+    st.write(f"除外されたファイル ({len(excluded_files)} 件):", excluded_files)
     # アルファベット優先、50音順でソート
     visible_thumbs = sorted(visible_thumbs, key=lambda x: locale.strxfrm(x))
-except dropbox.exceptions.ApiError as e:
+except Exception as e:
     visible_thumbs = []
-    st.error(f"サムネイルフォルダの読み込みに失敗しました: {str(e)}")
+    st.error(f"サムネイル取得中にエラーが発生しました: {str(e)}")
 
 # ページネーション
 total_items = len(visible_thumbs)
@@ -146,6 +189,7 @@ card_css = """
 .stCheckbox {
     z-index: 10;
     position: relative;
+    margin-top: 8px; /* チェックボックスと画像の間隔 */
 }
 button[kind="primary"] {
     background-color: #000000 !important;
