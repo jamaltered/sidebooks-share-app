@@ -74,14 +74,13 @@ def list_all_thumbnail_files():
                 except UnicodeEncodeError:
                     excluded_files.append((name, "エンコーディングエラー"))
                     continue
-                # 拡張子とサイズチェック
+                # 拡張子チェック（非画像除外）
                 if (name.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.JPG', '.JPEG', '.PNG', '.WEBP')) and
                     entry.size > 0):
-                    # MIMEタイプチェック
+                    # MIMEタイプチェック（簡略化）
                     try:
                         metadata = dbx.files_get_metadata(entry.path_lower, include_media_info=True)
-                        if hasattr(metadata, 'media_info') and metadata.media_info and \
-                           metadata.media_info.metadata.get('dimensions') is not None:
+                        if hasattr(metadata, 'media_info') and metadata.media_info:
                             thumbnails.append(name)
                         else:
                             excluded_files.append((name, f"MIMEタイプ非画像: {metadata}"))
@@ -95,7 +94,6 @@ def list_all_thumbnail_files():
         # st.write(f"サムネイルフォルダの全ファイル ({len(entries)} 件):", [entry.name for entry in entries])
         # st.write(f"フィルタ後のサムネイル ({len(thumbnails)} 件):", thumbnails)
         # st.write(f"除外されたファイル ({len(excluded_files)} 件):", excluded_files)
-        thumbnails = sorted(thumbnails, key=lambda x: locale.strxfrm(x))
     except dropbox.exceptions.AuthError as e:
         st.error(f"Dropbox認証エラー: {str(e)}")
         return []
