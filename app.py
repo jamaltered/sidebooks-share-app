@@ -1,123 +1,77 @@
 import streamlit as st
-import os
 import dropbox
+import os
 import difflib
+import io
+import zipfile
 from PIL import Image
-from io import BytesIO
 import pandas as pd
 
-# --- 設定 ---
-TARGET_FOLDER = "/成年コミック"
-EXPORT_FOLDER = "/SideBooksExport"
-THUMBNAIL_FOLDER = "/サムネイル"
+# Dropbox 接続（リフレッシュトークン方式）
+dbx = dropbox.Dropbox(
+    app_key=st.secrets["DROPBOX_APP_KEY"],
+    app_secret=st.secrets["DROPBOX_APP_SECRET"],
+    oauth2_refresh_token=st.secrets["DROPBOX_REFRESH_TOKEN"]
+)
+
+TARGET_FOLDER = st.secrets["TARGET_FOLDER"]
+EXPORT_FOLDER = st.secrets["EXPORT_FOLDER"]
+
+# ZIPファイル一覧（事前生成済みリスト）
 ZIP_LIST_PATH = "zip_file_list.txt"
+with open(ZIP_LIST_PATH, "r", encoding="utf-8") as f:
+    all_zip_paths = [line.strip() for line in f.readlines()]
 
-# --- Dropbox 認証（Secrets 使用） ---
-ACCESS_TOKEN = st.secrets["DROPBOX_ACCESS_TOKEN"]
-dbx = dropbox.Dropbox(ACCESS_TOKEN)
-
-# --- 事前読み込み：ファイル一覧（zip_file_list.txt から） ---
-@st.cache_data
-def load_zip_file_list():
-    try:
-        with open(ZIP_LIST_PATH, "r", encoding="utf-8") as f:
-            return [line.strip() for line in f.readlines()]
-    except FileNotFoundError:
-        return []
-
-zip_full_path_list = load_zip_file_list()
-
-# --- タイトル抽出用ユーティリティ ---
-def extract_display_title(file_path):
-    base = os.path.basename(file_path)
-    if base.startswith("("):
-        return base
-    # "[author] title" を "[author] title" に整える（必要に応じてここを調整）
-    return base
-
-# --- サムネイル取得 ---
-def get_thumbnail(zip_name):
-    thumb_path = f"{THUMBNAIL_FOLDER}/{zip_name.replace('.zip', '.jpg')}"
-    try:
-        md, res = dbx.files_download(thumb_path)
-        return Image.open(BytesIO(res.content))
-    except:
-        return None
-
-# --- エクスポートログ保存 ---
-def save_export_log(selected_files):
-    df = pd.DataFrame({"filename": selected_files})
-    dbx.files_upload(df.to_csv(index=False).encode("utf-8"),
-                     f"{TARGET_FOLDER}/export_log.csv",
-                     mode=dropbox.files.WriteMode("overwrite"))
-
-# --- エクスポート処理（近似検索付き） ---
-def export_files(selected_files):
-    failed = []
-    for filename in selected_files:
-        matched_path = difflib.get_close_matches(f"{TARGET_FOLDER}/{filename}", zip_full_path_list, n=1, cutoff=0.7)
-        if matched_path:
-            src_path = matched_path[0]
-            dest_path = f"{EXPORT_FOLDER}/{filename}"
-            try:
-                dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-            except Exception as e:
-                st.error(f"❌ {filename} のコピーに失敗: {e}")
-                failed.append(filename)
-        else:
-            st.error(f"❌ {filename} の類似ファイルが見つかりませんでした。")
-            failed.append(filename)
-
-    save_export_log(selected_files)
-    return failed
-
-# --- UI ---
+# Streamlit レイアウト
 st.set_page_config(layout="wide")
-st.title("📚 成年コミック共有")
+st.title("📚 成年コミック エクスポート")
 
-# --- ファイル一覧の取得 ---
-@st.cache_data
-def list_zip_files():
-    try:
-        result = dbx.files_list_folder(TARGET_FOLDER, recursive=True)
-        return [entry.path_display for entry in result.entries if entry.name.endswith(".zip")]
-    except Exception as e:
-        st.error(f"フォルダ取得エラー: {e}")
-        return []
-
-all_files = list_zip_files()
-filtered_files = sorted(set(os.path.basename(path) for path in all_files))
-
-# --- セッション状態 ---
+# セッション初期化
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = []
 
-# --- チェックボックス表示 + サムネイル ---
-cols = st.columns(2)
-for i, file_name in enumerate(filtered_files):
-    col = cols[i % 2]
-    with col:
-        checked = st.checkbox(file_name, key=file_name)
-        if checked:
-            if file_name not in st.session_state.selected_files:
-                st.session_state.selected_files.append(file_name)
-        else:
-            if file_name in st.session_state.selected_files:
-                st.session_state.selected_files.remove(file_name)
+# ZIPファイル表示（簡易版）
+def show_zip_file_list():
+    for path in all_zip_paths:
+        name = os.path.basename(path)
+        col1, col2 = st.columns([0.05, 0.95])
+        with col1:
+            checked = st.checkbox("", key=f"cb_{name}", value=name in st.session_state.selected_files)
+            if checked and name not in st.session_state.selected_files:
+                st.session_state.selected_files.append(name)
+            elif not checked and name in st.session_state.selected_files:
+                st.session_state.selected_files.remove(name)
+        with col2:
+            st.text(name)
 
-        thumb = get_thumbnail(file_name)
-        if thumb:
-            st.image(thumb, caption=file_name, use_container_width=True)
+show_zip_file_list()
 
-# --- エクスポートボタン ---
-st.markdown("### 📤 選択中のZIPをエクスポート")
-if st.button("✅ エクスポート開始"):
-    if st.session_state.selected_files:
-        with st.spinner("エクスポート中..."):
-            failed = export_files(st.session_state.selected_files)
-            if failed:
-                st.error(f"{len(failed)} 件のファイルのエクスポートに失敗しました。")
-            else:
-                st.success("✅ エクスポート完了！")
-    else:
-        st.warning("ファイルが選択されていません。")
+# 選択カウント + エクスポートボタン
+st.markdown("---")
+st.markdown(f"✅ **選択中：{len(st.session_state.selected_files)}件**")
+
+# エクスポート処理
+if st.session_state.selected_files:
+    if st.button("📤 選択中のZIPをエクスポート"):
+        failed = []
+        for name in st.session_state.selected_files:
+            try:
+                # 近似一致でフルパス検索
+                match = difflib.get_close_matches(name, all_zip_paths, n=1, cutoff=0.7)
+                if match:
+                    src_path = match[0]
+                    dest_path = f"{EXPORT_FOLDER}/{name}"
+                    dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+                else:
+                    st.error(f"❌ {name} のコピー元ファイルが見つかりませんでした。")
+                    failed.append(name)
+            except dropbox.exceptions.ApiError as e:
+                st.error(f"❌ {name} のコピーに失敗: {e}")
+                failed.append(name)
+
+        # ログ保存
+        log_path = os.path.join(os.path.dirname(ZIP_LIST_PATH), "export_log.csv")
+        df = pd.DataFrame({"filename": st.session_state.selected_files})
+        df.to_csv(log_path, index=False, encoding="utf-8-sig")
+        st.success("✅ エクスポートが完了しました。")
+
