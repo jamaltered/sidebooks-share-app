@@ -25,11 +25,12 @@ LOG_PATH = f"{THUMBNAIL_FOLDER}/export_log.csv"
 
 st.set_page_config(page_title="コミック一覧", layout="wide")
 
-# 初期状態
+# セッション初期化
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
+
 selected_count = len(st.session_state.selected_files)
 
 # サムネイル取得・ページ処理
@@ -96,14 +97,14 @@ top_link = """
 #scroll-top-btn {
     position: fixed;
     bottom: 30px;
-    left: 30px;
+    right: 20px;
     background: #007bff;
     color: white;
     padding: 14px 20px;
     border-radius: 10px;
     text-decoration: none;
-    z-index: 1000;
-    font-size: 16px;
+    z-index: 9999;
+    font-size: 18px;
     font-weight: bold;
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
@@ -126,8 +127,7 @@ except Exception:
     st.warning("Dropboxの認証情報が不足しています")
     st.stop()
 
-# User-Agent取得（デバイス情報）
-user_agent = "unknown"  # User-Agent は取得不可のため仮設定
+user_agent = "unknown"
 
 # ヘッダー + エクスポートボタン（追従ヘッダー）
 st.markdown(f"""
@@ -211,34 +211,35 @@ if st.session_state.selected_files:
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# 一覧表示
-for thumb in visible_thumbs:
-    zip_name = thumb.rsplit('.', 1)[0] + ".zip"
-    if zip_name not in zip_set:
-        continue
-
-    title_display = re.sub(r"^\(成年コミック\)\s*", "", zip_name.replace(".zip", ""))
-    thumb_path = f"{THUMBNAIL_FOLDER}/{thumb}"
-    url = get_temporary_image_url(thumb_path)
-
-    if url:
-        checkbox_id = f"checkbox_{zip_name}"
-        st.markdown(f"""
-        <div style='background-color:#fff; border-radius:10px; padding:10px; margin:10px 0; box-shadow:0 0 6px rgba(0,0,0,0.1);'>
-            <img src='{url}' style='width:100%; height:auto; border-radius:6px;' />
-            <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
-              {title_display}
-            </div>
-        """, unsafe_allow_html=True)
-
-        st.checkbox(
-            "選択",
-            value=zip_name in st.session_state.selected_files,
-            key=zip_name,
-            on_change=toggle_selection,
-            args=(zip_name,)
-        )
-
-        st.markdown("</div>", unsafe_allow_html=True)
+# 一覧表示（2列構成）
+for i in range(0, len(visible_thumbs), 2):
+    cols = st.columns(2)
+    for j, col in enumerate(cols):
+        if i + j >= len(visible_thumbs):
+            break
+        thumb = visible_thumbs[i + j]
+        zip_name = thumb.rsplit('.', 1)[0] + ".zip"
+        if zip_name not in zip_set:
+            continue
+        title_display = re.sub(r"^\(成年コミック\)\s*", "", zip_name.replace(".zip", ""))
+        thumb_path = f"{THUMBNAIL_FOLDER}/{thumb}"
+        url = get_temporary_image_url(thumb_path)
+        if url:
+            with col:
+                st.markdown(f"""
+                <div style='background-color:#fff; border-radius:10px; padding:10px; margin:10px 0; box-shadow:0 0 6px rgba(0,0,0,0.1);'>
+                    <img src='{url}' style='width:100%; height:auto; border-radius:6px;' />
+                    <div style='font-size: 0.9rem; font-weight: bold; margin-top: 8px; color: #111;'>
+                      {title_display}
+                    </div>
+                """, unsafe_allow_html=True)
+                st.checkbox(
+                    "選択",
+                    value=zip_name in st.session_state.selected_files,
+                    key=zip_name,
+                    on_change=toggle_selection,
+                    args=(zip_name,)
+                )
+                st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown(top_link, unsafe_allow_html=True)
