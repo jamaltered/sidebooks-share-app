@@ -3,33 +3,41 @@ import dropbox
 import streamlit as st
 from dotenv import load_dotenv
 import locale
+from datetime import datetime
+from io import StringIO
+import csv
 
-# 言語ロケール設定
-locale.setlocale(locale.LC_ALL, '')
+# 環境変数読み込み
 load_dotenv()
-
 APP_KEY = os.getenv("DROPBOX_APP_KEY")
 APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
 REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
 
+# Dropbox クライアント初期化
 dbx = dropbox.Dropbox(
     app_key=APP_KEY,
     app_secret=APP_SECRET,
     oauth2_refresh_token=REFRESH_TOKEN
 )
 
-# フォルダパス
+# フォルダパス設定
+TARGET_FOLDER = "/成年コミック"
 THUMBNAIL_FOLDER = "/サムネイル"
+EXPORT_FOLDER = "/SideBooksExport"
+LOG_PATH = f"{THUMBNAIL_FOLDER}/export_log.csv"
+
+# ページ設定
 st.set_page_config(page_title="コミック一覧", layout="wide")
+locale.setlocale(locale.LC_ALL, '')
 st.markdown('<a id="top"></a>', unsafe_allow_html=True)
 
-# セッション状態初期化
+# セッション初期化
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
 
-# サムネイル取得（media_infoではなく拡張子＋サイズで判定）
+# ファイル一覧取得
 def list_all_thumbnail_files():
     thumbnails = []
     try:
@@ -48,14 +56,25 @@ def list_all_thumbnail_files():
         st.error(f"サムネイル取得エラー: {str(e)}")
     return thumbnails
 
-# 一時的な画像URL取得
+# 一時リンク取得
 def get_temporary_image_url(path):
     try:
         return dbx.files_get_temporary_link(path).link
     except:
         return None
 
-# 1ページに表示する件数
+# エクスポートログ保存
+def save_export_log(file_list):
+    user_agent = st.request.headers.get("user-agent", "unknown")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["timestamp", "user_agent", "filename"])
+    for f in file_list:
+        writer.writerow([now, user_agent, f])
+    dbx.files_upload(output.getvalue().encode("utf-8"), LOG_PATH, mode=dropbox.files.WriteMode.overwrite)
+
+# ページネーション
 PER_PAGE = 200
 all_thumbs = list_all_thumbnail_files()
 max_pages = (len(all_thumbs) + PER_PAGE - 1) // PER_PAGE
@@ -79,7 +98,7 @@ start = (page - 1) * PER_PAGE
 end = start + PER_PAGE
 visible_thumbs = all_thumbs[start:end]
 
-# TOPに戻るボタン
+# Topボタン（左下）
 st.markdown("""
 <a href="#top" class="top-button">↑ Top</a>
 <style>
@@ -99,11 +118,31 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 選択数表示
+# 見出し＋選択数表示
 st.markdown("### 📚 コミック一覧")
 st.markdown(f"<p>✅選択中: {len(st.session_state.selected_files)}</p>", unsafe_allow_html=True)
 
-# CSSでカード表示形式を整える
+# ✅ エクスポートボタン（上に常時表示）
+if st.session_state.selected_files:
+    if st.button("📤 選択中のZIPをエクスポート"):
+        success_count = 0
+        try:
+            dbx.files_delete_v2(EXPORT_FOLDER)
+        except:
+            pass
+        dbx.files_create_folder_v2(EXPORT_FOLDER)
+        for name in st.session_state.selected_files:
+            from_path = f"{TARGET_FOLDER}/{name}"
+            to_path = f"{EXPORT_FOLDER}/{name}"
+            try:
+                dbx.files_copy_v2(from_path, to_path)
+                success_count += 1
+            except Exception as e:
+                st.error(f"❌ {name} のコピーに失敗: {e}")
+        save_export_log(st.session_state.selected_files)
+        st.success(f"✅ エクスポート完了！ {success_count} 件を SideBooksExport に保存しました。")
+
+# カード表示用CSS
 st.markdown("""
 <style>
 .card-container {
@@ -132,7 +171,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# カード表示（画像＋ZIP名＋チェックボックス）
+# サムネイル＋チェックボックスの表示
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
 for thumb in visible_thumbs:
     zip_name = os.path.splitext(thumb)[0] + ".zip"
@@ -154,18 +193,3 @@ for thumb in visible_thumbs:
         else:
             st.session_state.selected_files.discard(zip_name)
 st.markdown("</div>", unsafe_allow_html=True)
-
-# エクスポート処理UI
-if st.session_state.selected_files:
-    st.markdown("---")
-    if st.button("📤 選択中のZIPをエクスポート"):
-        logs = []
-        for zip_name in selection:
-            if zip_name in zip_paths:
-                if export_zip(zip_name, zip_paths[zip_name]):
-                    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    logs.append([now, user_name, zip_name])
-        if logs:
-            write_export_log(logs)
-            st.success(f"{len(logs)} 件をエクスポート＆ログ記録しました！")
-
