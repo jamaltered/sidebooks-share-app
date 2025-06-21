@@ -3,6 +3,8 @@ import dropbox
 import streamlit as st
 from dotenv import load_dotenv
 import locale
+from datetime import datetime
+import socket
 
 # 言語ロケール設定
 locale.setlocale(locale.LC_ALL, '')
@@ -20,6 +22,10 @@ dbx = dropbox.Dropbox(
 
 # フォルダパス
 THUMBNAIL_FOLDER = "/サムネイル"
+ZIP_SRC_FOLDER = "/ZIP元フォルダ"
+ZIP_DEST_FOLDER = "/ZIP出力先"
+LOG_PATH = "/log/export_log.csv"
+
 st.set_page_config(page_title="コミック一覧", layout="wide")
 st.markdown('<a id="top"></a>', unsafe_allow_html=True)
 
@@ -157,17 +163,14 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 # --- UI: エクスポートボタン ---
 st.markdown("---")
-export_disabled = not st.session_state.selected_files  # ←必須
+export_disabled = not st.session_state.selected_files
 
 if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabled):
-    # ...（今のあなたの処理）
-    pass
-
-# --- デバッグ情報 ---
-st.markdown("---")
-st.write("🧪 デバッグ出力")
-st.write("選択されたZIP:", list(st.session_state.selected_files))
-
+    success_count = 0
+    fail_count = 0
+    log_lines = []
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    device = socket.gethostname()
 
     # ✅ 既存のエクスポート先ZIPファイルを全削除
     try:
@@ -197,7 +200,7 @@ st.write("選択されたZIP:", list(st.session_state.selected_files))
             _, res = dbx.files_download(LOG_PATH)
             existing_log = res.content.decode("utf-8")
         except dropbox.exceptions.ApiError:
-            existing_log = "timestamp,device,file\n"  # 初回ヘッダー
+            existing_log = "timestamp,device,file\n"
 
         new_log = existing_log + "\n".join(log_lines) + "\n"
         dbx.files_upload(
@@ -210,8 +213,7 @@ st.write("選択されたZIP:", list(st.session_state.selected_files))
 
     st.success(f"✅ エクスポート完了: {success_count} 件成功、{fail_count} 件失敗")
 
-
-# デバッグ表示（必要なら削除してOK）
+# デバッグ表示
 st.markdown("---")
 st.write("🧪 デバッグ出力")
 st.write("選択されたZIP:", list(st.session_state.selected_files))
