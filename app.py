@@ -24,6 +24,8 @@ EXPORT_FOLDER = "/SideBooksExport"
 LOG_PATH = f"{THUMBNAIL_FOLDER}/export_log.csv"
 
 st.set_page_config(page_title="コミック一覧", layout="wide")
+
+# アンカー用トークンをページトップに設置
 st.markdown('<a id="top"></a>', unsafe_allow_html=True)
 
 # 初期状態
@@ -31,8 +33,9 @@ if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
+selected_count = len(st.session_state.selected_files)
 
-# サムネイル取得
+# サムネイル取得・ページ処理
 def list_zip_files():
     zip_files = []
     try:
@@ -72,6 +75,7 @@ zip_set = {entry.name for entry in zip_files}
 PER_PAGE = 200
 max_pages = (len(thumbnails) + PER_PAGE - 1) // PER_PAGE
 
+# ページ移動UI（横並び）
 col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
 with col1:
     if st.button("⬅ 前へ") and st.session_state.page > 1:
@@ -90,12 +94,31 @@ start_idx = (page - 1) * PER_PAGE
 end_idx = start_idx + PER_PAGE
 visible_thumbs = sorted(thumbnails)[start_idx:end_idx]
 
-# コミック一覧
+# ページトップリンク（左下 + サイズ調整 + 文字色白）
+st.markdown("""
+<a href="#top" class="top-button">↑ Top</a>
+<style>
+.top-button {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  background: #007bff;
+  color: white;
+  padding: 14px 20px;
+  font-size: 20px;
+  border-radius: 50px;
+  text-decoration: none;
+  z-index: 9999;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+</style>
+""", unsafe_allow_html=True)
+
+# サムネイル表示
 st.markdown("### 📚 コミック一覧")
-selected_count = len(st.session_state.selected_files)
 st.markdown(f"<p>✅選択中: {selected_count}</p>", unsafe_allow_html=True)
 
-# CSS
+# サムネイル表示レイアウト
 card_css = """
 <style>
 .card-container {
@@ -125,12 +148,14 @@ card_css = """
 """
 st.markdown(card_css, unsafe_allow_html=True)
 
-# サムネイル表示
+# 表示ループ
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
 for name in visible_thumbs:
     zip_name = os.path.splitext(name)[0] + ".zip"
     image_path = f"{THUMBNAIL_FOLDER}/{name}"
     image_url = get_temporary_image_url(image_path)
+    checkbox_key = f"cb_{zip_name}"
+    is_checked = zip_name in st.session_state.selected_files
 
     with st.container():
         st.markdown(f"""
@@ -139,52 +164,15 @@ for name in visible_thumbs:
             <label><strong>{zip_name}</strong></label>
         </div>
         """, unsafe_allow_html=True)
-
-        if f"cb_{zip_name}" not in st.session_state:
-            st.session_state[f"cb_{zip_name}"] = zip_name in st.session_state.selected_files
-
-        checked = st.checkbox("選択", key=f"cb_{zip_name}", value=st.session_state[f"cb_{zip_name}"])
+        checked = st.checkbox("選択", value=is_checked, key=checkbox_key)
         if checked:
             st.session_state.selected_files.add(zip_name)
-            st.session_state[f"cb_{zip_name}"] = True
         else:
             st.session_state.selected_files.discard(zip_name)
-            st.session_state[f"cb_{zip_name}"] = False
 st.markdown("</div>", unsafe_allow_html=True)
-
-# 「全選択解除」ボタン
-if st.session_state.selected_files:
-    if st.button("❌ 選択解除"):
-        # 選択中の ZIP に対応するチェックボックスキーを削除（再描画でOFFになる）
-        for zip_name in list(st.session_state.selected_files):
-            cb_key = f"cb_{zip_name}"
-            if cb_key in st.session_state:
-                del st.session_state[cb_key]  # ← これが重要！
-        st.session_state.selected_files.clear()
-        st.experimental_rerun()  # ← 再描画を即時実行
 
 # エクスポートボタン
 if st.session_state.selected_files:
     st.markdown("---")
     if st.button("📤 選択中のZIPをエクスポート"):
         st.success("エクスポート処理をここに実装")
-
-# TOPボタン（文字色白）
-st.markdown("""
-<a href="#top" class="top-button">↑ Top</a>
-<style>
-.top-button {
-  position: fixed;
-  bottom: 24px;
-  left: 24px;
-  background: #007bff;
-  color: #ffffff !important;
-  padding: 14px 20px;
-  font-size: 20px;
-  border-radius: 50px;
-  text-decoration: none;
-  z-index: 9999;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-}
-</style>
-""", unsafe_allow_html=True)
