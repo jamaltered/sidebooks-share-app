@@ -56,10 +56,15 @@ def clean_filename(filename):
 
 # サムネイル取得
 try:
+    all_files = dbx.files_list_folder(THUMBNAIL_FOLDER, recursive=False).entries
     visible_thumbs = [
-        entry.name for entry in dbx.files_list_folder(THUMBNAIL_FOLDER).entries
-        if entry.name.lower().endswith(('.jpg', '.jpeg', '.png'))
+        entry.name for entry in all_files
+        if isinstance(entry, dropbox.files.FileMetadata) and
+        entry.name.lower().endswith(('.jpg', '.jpeg', '.png'))
     ]
+    # デバッグ用: 全ファイルリストを表示（本番ではコメントアウト）
+    # st.write("サムネイルフォルダの全ファイル:", [entry.name for entry in all_files])
+    # st.write("フィルタ後のサムネイル:", visible_thumbs)
     # アルファベット優先、50音順でソート
     visible_thumbs = sorted(visible_thumbs, key=lambda x: locale.strxfrm(x))
 except dropbox.exceptions.ApiError as e:
@@ -104,6 +109,8 @@ with col5:
 # 選択数カウント
 selected_count = len(st.session_state.selected_files)
 st.markdown(f"<p>✅選択中: {selected_count}</p>", unsafe_allow_html=True)
+# デバッグ用: 選択状態を表示（本番ではコメントアウト）
+# st.write("現在の選択ファイル:", st.session_state.selected_files)
 
 # 区切り線
 st.markdown("---")
@@ -226,6 +233,15 @@ def export_files():
     except Exception as e:
         st.error(f"エクスポート処理中にエラーが発生しました: {str(e)}")
 
+# チェックボックス更新コールバック
+def update_checkbox(zip_name, checked):
+    if checked:
+        st.session_state.selected_files.add(zip_name)
+    else:
+        st.session_state.selected_files.discard(zip_name)
+    # デバッグ用: コールバック後の状態を表示（本番ではコメントアウト）
+    # st.write(f"チェックボックス更新: {zip_name}, 状態: {checked}, 選択ファイル: {st.session_state.selected_files}")
+
 # サムネイル表示
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
 for name in current_thumbs:
@@ -248,17 +264,18 @@ for name in current_thumbs:
         </div>
         """, unsafe_allow_html=True)
 
-        # チェックボックス
-        checkbox_key = f"cb_{zip_name}_{start_idx}_{name}"
+        # チェックボックス（キー強化）
+        checkbox_key = f"cb_{zip_name}_{st.session_state.page}_{name}_{start_idx}"
         checked = st.checkbox(
             "選択",
             key=checkbox_key,
-            value=zip_name in st.session_state.selected_files
+            value=zip_name in st.session_state.selected_files,
+            on_change=update_checkbox,
+            args=(zip_name, None)  # None は後で checked に置き換わる
         )
-        if checked:
-            st.session_state.selected_files.add(zip_name)
-        else:
-            st.session_state.selected_files.discard(zip_name)
+        # コールバックが即時反映されない場合のフォールバック
+        if checked != (zip_name in st.session_state.selected_files):
+            update_checkbox(zip_name, checked)
 
 st.markdown("</div>", unsafe_allow_html=True)
 
