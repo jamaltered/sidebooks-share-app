@@ -1,96 +1,86 @@
 import streamlit as st
 import dropbox
-import os
 import difflib
 import hashlib
+import os
 
-# --- Dropbox接続 ---
-APP_KEY = st.secrets["DROPBOX_APP_KEY"]
-APP_SECRET = st.secrets["DROPBOX_APP_SECRET"]
-REFRESH_TOKEN = st.secrets["DROPBOX_REFRESH_TOKEN"]
-
+# Dropbox 認証
 dbx = dropbox.Dropbox(
-    app_key=APP_KEY,
-    app_secret=APP_SECRET,
-    oauth2_refresh_token=REFRESH_TOKEN
+    app_key=st.secrets["DROPBOX_APP_KEY"],
+    app_secret=st.secrets["DROPBOX_APP_SECRET"],
+    oauth2_refresh_token=st.secrets["DROPBOX_REFRESH_TOKEN"]
 )
 
-# --- 各種定数 ---
-TARGET_FOLDER = st.secrets["TARGET_FOLDER"]  # 例: /成年コミック
-EXPORT_FOLDER = st.secrets["EXPORT_FOLDER"]  # 例: /SideBooksExport
-THUMBNAIL_FOLDER = st.secrets["THUMBNAIL_FOLDER"]  # 例: /サムネイル
+# 設定
+TARGET_FOLDER = st.secrets["TARGET_FOLDER"]  # 例: "/成年コミック"
+EXPORT_FOLDER = st.secrets["EXPORT_FOLDER"]  # 例: "/SideBooksExport"
 ZIP_LIST_PATH = "zip_file_list.txt"
 
-# --- 近似一致検索 ---
-def find_closest_match(filename, path_list, cutoff=0.7):
-    matches = difflib.get_close_matches(filename, path_list, n=1, cutoff=cutoff)
+# MD5ハッシュでユニークなkeyを生成
+def make_safe_key(name: str) -> str:
+    return hashlib.md5(name.encode("utf-8")).hexdigest()
+
+# 近似ファイルをリストから探す
+def find_similar_file(name, path_list, cutoff=0.7):
+    matches = difflib.get_close_matches(name, path_list, n=1, cutoff=cutoff)
     return matches[0] if matches else None
 
-# --- 一意なキー生成 ---
-def hash_key(name):
-    return hashlib.md5(name.encode('utf-8')).hexdigest()
-
-# --- エクスポートログ保存 ---
-def save_export_log(exported):
-    log_path = os.path.join(ZIP_LIST_PATH.rsplit("/", 1)[0], "export_log.csv")
-    with open(log_path, "w", encoding="utf-8") as f:
-        for name in exported:
-            f.write(f"{name}\n")
-
-# --- zip_file_list.txt 読み込み ---
+# zip_file_list.txt 読み込み
 @st.cache_data
-def load_zip_file_list():
+def load_zip_list():
+    if not os.path.exists(ZIP_LIST_PATH):
+        st.error("⚠️ zip_file_list.txt が見つかりません。アップロードしてください。")
+        return []
     with open(ZIP_LIST_PATH, "r", encoding="utf-8") as f:
         return [line.strip() for line in f.readlines()]
 
-# --- メイン画面表示 ---
-st.title("📚 SideBooks ZIP共有ツール")
-
-if "selected_files" not in st.session_state:
-    st.session_state.selected_files = []
-
-all_zip_paths = load_zip_file_list()
-file_names = [os.path.basename(p) for p in all_zip_paths]
-
-# --- ZIP一覧表示 ---
-st.subheader("📦 ZIPファイル一覧")
-
-for name in file_names:
-    key = hash_key(name)
-    checked = st.checkbox("", key=f"cb_{key}", value=name in st.session_state.selected_files)
-    st.write(name)
-    if checked:
-        if name not in st.session_state.selected_files:
+# 選択UIと一覧表示
+def show_zip_file_list(zip_paths):
+    st.session_state.selected_files = st.session_state.get("selected_files", [])
+    for full_path in zip_paths:
+        name = os.path.basename(full_path)
+        key = make_safe_key(name)
+        checked = st.checkbox(name, key=f"cb_{key}", value=(name in st.session_state.selected_files))
+        if checked and name not in st.session_state.selected_files:
             st.session_state.selected_files.append(name)
-    else:
-        if name in st.session_state.selected_files:
+        elif not checked and name in st.session_state.selected_files:
             st.session_state.selected_files.remove(name)
 
-# --- エクスポート処理 ---
-if st.session_state.selected_files:
-    st.markdown("### ✅ 選択中のZIPをエクスポート")
-    if st.button("📤 エクスポート実行"):
-        failed = []
-        for name in st.session_state.selected_files:
-            try:
-                src_path = f"{TARGET_FOLDER}/{name}"
-                dest_path = f"{EXPORT_FOLDER}/{name}"
+# エクスポート処理
+def export_selected(zip_paths):
+    failed = []
+    for name in st.session_state.selected_files:
+        original_path = f"{TARGET_FOLDER}/{name}"
+        try:
+            dbx.files_copy_v2(original_path, f"{EXPORT_FOLDER}/{name}", allow_shared_folder=True, autorename=True)
+        except dropbox.exceptions.ApiError:
+            match_path = find_similar_file(original_path, zip_paths)
+            if match_path:
                 try:
-                    dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-                except dropbox.exceptions.ApiError:
-                    # 近似検索で対応
-                    match = find_closest_match(src_path, all_zip_paths)
-                    if match:
-                        dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
-                    else:
-                        failed.append(name)
-            except Exception as e:
-                st.error(f"❌ {name} のコピーに失敗: {e}")
-                failed.append(name)
-        if failed:
-            st.warning("⚠️ 一部のファイルはエクスポートできませんでした。")
-            for f in failed:
-                st.write(f"・{f}")
-        else:
-            st.success("✅ エクスポート完了！")
-        save_export_log(st.session_state.selected_files)
+                    dbx.files_copy_v2(match_path, f"{EXPORT_FOLDER}/{name}", allow_shared_folder=True, autorename=True)
+                except Exception as e:
+                    failed.append(f"{name}（近似マッチコピー失敗: {str(e)}）")
+            else:
+                failed.append(f"{name}（見つからず）")
+    return failed
+
+# メイン処理
+st.title("📚 SideBooks共有 ZIPエクスポート")
+
+zip_paths = load_zip_list()
+
+if zip_paths:
+    st.markdown("### 🔽 ZIP一覧（チェックしてエクスポート）")
+    show_zip_file_list(zip_paths)
+
+    if st.session_state.get("selected_files"):
+        st.markdown("---")
+        st.markdown(f"✅ 選択中：{len(st.session_state.selected_files)} 件")
+        if st.button("📤 選択中のZIPをエクスポート"):
+            failures = export_selected(zip_paths)
+            if failures:
+                st.error("一部のファイルでエクスポートに失敗しました：\n" + "\n".join(failures))
+            else:
+                st.success("✅ エクスポート完了！")
+else:
+    st.warning("ZIPリストが読み込まれていません。")
