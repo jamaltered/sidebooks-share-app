@@ -155,23 +155,19 @@ for thumb in visible_thumbs:
             st.session_state.selected_files.discard(zip_name)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# エクスポート処理UI（常時表示、未選択時は無効）
+# --- UI: エクスポートボタン ---
 st.markdown("---")
-export_disabled = not st.session_state.selected_files
-import platform
-from datetime import datetime
+export_disabled = not st.session_state.selected_files  # ←必須
 
 if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabled):
-    ZIP_SRC_FOLDER = "/成年コミック"
-    ZIP_DEST_FOLDER = "/sidebooksexport"
-    LOG_PATH = f"{ZIP_DEST_FOLDER}/export_log.csv"
+    # ...（今のあなたの処理）
+    pass
 
-    device = platform.node()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# --- デバッグ情報 ---
+st.markdown("---")
+st.write("🧪 デバッグ出力")
+st.write("選択されたZIP:", list(st.session_state.selected_files))
 
-    success_count = 0
-    fail_count = 0
-    log_lines = []
 
     # ✅ 既存のエクスポート先ZIPファイルを全削除
     try:
