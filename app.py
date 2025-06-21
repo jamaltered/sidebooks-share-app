@@ -14,28 +14,25 @@ APP_KEY = os.getenv("DROPBOX_APP_KEY")
 APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
 REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
 
+ZIP_SRC_FOLDER = "/ZIP元フォルダ"
+ZIP_DEST_FOLDER = "/ZIP出力先"
+LOG_PATH = "/log/export_log.csv"
+
 dbx = dropbox.Dropbox(
     app_key=APP_KEY,
     app_secret=APP_SECRET,
     oauth2_refresh_token=REFRESH_TOKEN
 )
 
-# フォルダパス
 THUMBNAIL_FOLDER = "/サムネイル"
-ZIP_SRC_FOLDER = "/ZIP元フォルダ"
-ZIP_DEST_FOLDER = "/ZIP出力先"
-LOG_PATH = "/log/export_log.csv"
-
 st.set_page_config(page_title="コミック一覧", layout="wide")
 st.markdown('<a id="top"></a>', unsafe_allow_html=True)
 
-# セッション状態初期化
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = set()
 if "page" not in st.session_state:
     st.session_state.page = 1
 
-# サムネイル取得
 def list_all_thumbnail_files():
     thumbnails = []
     try:
@@ -54,20 +51,17 @@ def list_all_thumbnail_files():
         st.error(f"サムネイル取得エラー: {str(e)}")
     return thumbnails
 
-# 一時的な画像URL取得
 def get_temporary_image_url(path):
     try:
         return dbx.files_get_temporary_link(path).link
     except:
         return None
 
-# 1ページに表示する件数
 PER_PAGE = 200
 all_thumbs = list_all_thumbnail_files()
 max_pages = (len(all_thumbs) + PER_PAGE - 1) // PER_PAGE
 page = st.session_state.page
 
-# ページ切り替えUI
 col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
 with col1:
     if st.button("⬅ 前へ") and page > 1:
@@ -75,7 +69,7 @@ with col1:
 with col2:
     st.markdown(f"**{page} / {max_pages}**")
 with col3:
-    if st.button("次へ ➡") and page < max_pages:
+    if st.button("次へ ➔") and page < max_pages:
         st.session_state.page += 1
 with col4:
     selection = st.selectbox("ページ番号", list(range(1, max_pages + 1)), index=page - 1)
@@ -85,7 +79,6 @@ start = (page - 1) * PER_PAGE
 end = start + PER_PAGE
 visible_thumbs = all_thumbs[start:end]
 
-# TOPに戻るボタン
 st.markdown("""
 <a href="#top" class="top-button">↑ Top</a>
 <style>
@@ -105,11 +98,56 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 選択数表示
 st.markdown("### 📚 コミック一覧")
 st.markdown(f"<p>✅選択中: {len(st.session_state.selected_files)}</p>", unsafe_allow_html=True)
 
-# CSSでカード表示形式を整える
+# ボタンを上に移動
+export_disabled = not st.session_state.selected_files
+if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabled):
+    success_count = 0
+    fail_count = 0
+    log_lines = []
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    device = socket.gethostname()
+
+    try:
+        result = dbx.files_list_folder(ZIP_DEST_FOLDER)
+        for entry in result.entries:
+            if isinstance(entry, dropbox.files.FileMetadata) and entry.name.lower().endswith(".zip"):
+                dbx.files_delete_v2(entry.path_lower)
+    except dropbox.exceptions.ApiError as e:
+        st.warning(f"⚠️ 既存ファイルの削除に失敗: {e}")
+
+    for zip_name in st.session_state.selected_files:
+        src_path = f"{ZIP_SRC_FOLDER}/{zip_name}"
+        dest_path = f"{ZIP_DEST_FOLDER}/{zip_name}"
+        try:
+            dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+            log_lines.append(f"{timestamp},{device},{zip_name}")
+            success_count += 1
+        except dropbox.exceptions.ApiError as e:
+            st.error(f"❌ {zip_name} のコピーに失敗: {e}")
+            fail_count += 1
+
+    try:
+        existing_log = ""
+        try:
+            _, res = dbx.files_download(LOG_PATH)
+            existing_log = res.content.decode("utf-8")
+        except dropbox.exceptions.ApiError:
+            existing_log = "timestamp,device,file\n"
+
+        new_log = existing_log + "\n".join(log_lines) + "\n"
+        dbx.files_upload(
+            new_log.encode("utf-8"),
+            LOG_PATH,
+            mode=dropbox.files.WriteMode.overwrite
+        )
+    except Exception as e:
+        st.error(f"⚠️ ログファイルの更新に失敗しました: {e}")
+
+    st.success(f"✅ エクスポート完了: {success_count} 件成功、{fail_count} 件失敗")
+
 st.markdown("""
 <style>
 .card-container {
@@ -138,7 +176,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# カード表示（画像＋ZIP名＋チェックボックス）
 st.markdown('<div class="card-container">', unsafe_allow_html=True)
 for thumb in visible_thumbs:
     zip_name = os.path.splitext(thumb)[0] + ".zip"
@@ -160,58 +197,6 @@ for thumb in visible_thumbs:
         else:
             st.session_state.selected_files.discard(zip_name)
 st.markdown("</div>", unsafe_allow_html=True)
-
-# --- UI: エクスポートボタン ---
-st.markdown("---")
-export_disabled = not st.session_state.selected_files
-
-if st.button("📤 選択中のZIPをエクスポート", disabled=export_disabled):
-    success_count = 0
-    fail_count = 0
-    log_lines = []
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    device = socket.gethostname()
-
-    # ✅ 既存のエクスポート先ZIPファイルを全削除
-    try:
-        result = dbx.files_list_folder(ZIP_DEST_FOLDER)
-        for entry in result.entries:
-            if isinstance(entry, dropbox.files.FileMetadata) and entry.name.lower().endswith(".zip"):
-                dbx.files_delete_v2(entry.path_lower)
-    except dropbox.exceptions.ApiError as e:
-        st.warning(f"⚠️ 既存ファイルの削除に失敗: {e}")
-
-    # ✅ 選択ファイルのコピー処理
-    for zip_name in st.session_state.selected_files:
-        src_path = f"{ZIP_SRC_FOLDER}/{zip_name}"
-        dest_path = f"{ZIP_DEST_FOLDER}/{zip_name}"
-        try:
-            dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-            log_lines.append(f"{timestamp},{device},{zip_name}")
-            success_count += 1
-        except dropbox.exceptions.ApiError as e:
-            st.error(f"❌ {zip_name} のコピーに失敗: {e}")
-            fail_count += 1
-
-    # ✅ ログ追記（CSV形式）
-    try:
-        existing_log = ""
-        try:
-            _, res = dbx.files_download(LOG_PATH)
-            existing_log = res.content.decode("utf-8")
-        except dropbox.exceptions.ApiError:
-            existing_log = "timestamp,device,file\n"
-
-        new_log = existing_log + "\n".join(log_lines) + "\n"
-        dbx.files_upload(
-            new_log.encode("utf-8"),
-            LOG_PATH,
-            mode=dropbox.files.WriteMode.overwrite
-        )
-    except Exception as e:
-        st.error(f"⚠️ ログファイルの更新に失敗しました: {e}")
-
-    st.success(f"✅ エクスポート完了: {success_count} 件成功、{fail_count} 件失敗")
 
 # デバッグ表示
 st.markdown("---")
