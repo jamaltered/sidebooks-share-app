@@ -147,15 +147,15 @@ def save_export_log(file_list):
         all_rows = existing_content + [",".join(row) for row in rows]
 
         import tempfile
-        with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False) as temp_file:
-            writer = csv.writer(temp_file)
+        with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False) as temp_key:
+            writer = csv.writer(temp_key)
             for row in all_rows:
                 writer.writerow(row.split(","))
 
-        with open(temp_file.name, "rb") as f:
+        with open(temp_key.name, "rb") as f:
             dbx.files_upload(f.read(), log_path, mode=dropbox.files.WriteMode("overwrite"))
         
-        os.unlink(temp_file.name)
+        os.unlink(temp_key.name)
     except Exception as e:
         st.error(f"出力ログ保存失敗: {str(e)}")
         logger.error(f"出力ログ保存失敗: {log_path}, エラー: {str(e)}", exc_info=True)
@@ -187,31 +187,32 @@ def show_zip_file_list(sorted_paths):
     page_files = sorted_paths[start:end]
 
     # 右側に固定表示（選択数とエクスポートボタン）
-    st.markdown(
-        """
-        <style>
-        .fixed-panel {
-            position: fixed;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            background-color: #f0f0f0;
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 100;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        .export-button {
-            margin-top: 10px;
-        }
-        </style>
-        <div class="fixed-panel">
-            <p>選択中: <strong>{selected_count}</strong>件</p>
-            <button class="export-button" onclick="document.getElementById('export_button').click()">📤 エクスポート</button>
-        </div>
-        """.format(selected_count=len(st.session_state.get("selected_files", []))),
-        unsafe_allow_html=True
-    )
+    if st.session_state.get("selected_files", []):
+        st.markdown(
+            """
+            <style>
+            .fixed-panel {
+                position: fixed;
+                right: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                background-color: #f0f0f0;
+                padding: 10px;
+                border-radius: 5px;
+                z-index: 100;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }
+            .export-button {
+                margin-top: 10px;
+            }
+            </style>
+            <div class="fixed-panel">
+                <p>選択中: <strong>{selected_count}</strong>件</p>
+                <button class="export-button" onclick="document.getElementById('export_button').click()">📤 エクスポート</button>
+            </div>
+            """.format(selected_count=len(st.session_state.get("selected_files", []))),
+            unsafe_allow_html=True
+        )
 
     # ページ情報
     st.write(f'<p class="page-info">ページ {page}/{total_pages}</p>', unsafe_allow_html=True)
@@ -271,7 +272,7 @@ def update_selected_files(name, key):
     logger.info(f"Updated selected_files: {st.session_state.selected_files} for key {key}")
 
 # エクスポート処理
-if st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート", visible=True):
+if st.session_state.get("selected_files", []) and st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート"):
     try:
         for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
             dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
