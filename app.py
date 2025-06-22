@@ -206,6 +206,8 @@ zip_paths = deduplicate_zip_paths(load_zip_file_list())
 sort_option = st.selectbox("並び順", ["名前順", "作家順"])
 sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
 
+st.markdown('<a href="#top">↑ TOPに戻る</a>', unsafe_allow_html=True)
+
 show_zip_file_list(sorted_zip_paths)
 
 if st.session_state.selected_files:
