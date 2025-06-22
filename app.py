@@ -207,7 +207,7 @@ def show_zip_file_list(sorted_paths):
         </style>
         <div class="fixed-panel">
             <p>選択中: <strong>{selected_count}</strong>件</p>
-            <button class="export-button stButton" onclick="document.getElementById('export_button').click()">📤 エクスポート</button>
+            <button class="export-button" onclick="document.getElementById('export_button').click()">📤 エクスポート</button>
         </div>
         """.format(selected_count=len(st.session_state.get("selected_files", []))),
         unsafe_allow_html=True
@@ -270,8 +270,8 @@ def update_selected_files(name, key):
             st.session_state.selected_files.remove(name)
     logger.info(f"Updated selected_files: {st.session_state.selected_files} for key {key}")
 
-# エクスポート処理（非表示ボタンでトリガー）
-if st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート", visible=False):
+# エクスポート処理
+if st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート", visible=True):
     try:
         for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
             dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
