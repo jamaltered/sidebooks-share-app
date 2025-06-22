@@ -168,109 +168,6 @@ def set_user_agent():
     if "session_id" not in st.session_state:
         st.session_state["session_id"] = str(uuid.uuid4())
 
-# カスタムCSSでレイアウトとチェックボックスを調整
-st.markdown(
-    """
-    <style>
-    /* ビューポート設定 */
-    @viewport {
-        width: device-width;
-        initial-scale: 1.0;
-    }
-    /* 各アイテムのスタイル */
-    .item-container {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 5px;
-    }
-    .item-container img {
-        max-width: 140px;
-        width: 100%;
-        height: auto;
-    }
-    /* チェックボックスを大きく */
-    .stCheckbox > div > label > input[type="checkbox"] {
-        transform: scale(1.5);
-        margin-right: 5px;
-    }
-    /* チェックボックスラベル */
-    .stCheckbox > div > label {
-        font-size: 1.2em;
-        transition: color 0.3s;
-    }
-    /* チェック時文字色を赤に */
-    .stCheckbox > div > label[data-baseweb="checkbox"] input:checked + span + span {
-        color: red;
-    }
-    /* サムネイルなしのテキスト */
-    .no-thumbnail {
-        font-size: 1.2em;
-    }
-    /* スマホ（iPhone 15想定） */
-    @media (max-width: 768px) {
-        .item-container img {
-            max-width: 120px;
-        }
-        .stCheckbox > div > label > input[type="checkbox"] {
-            transform: scale(1.3);
-        }
-        .stCheckbox > div > label {
-            font-size: 1.1em;
-        }
-        .no-thumbnail {
-            font-size: 1.1em;
-        }
-        .fixed-panel {
-            right: 10px;
-            min-width: 120px;
-            padding: 10px;
-        }
-    }
-    /* ページ情報のスタイル */
-    .page-info {
-        font-size: 1.2em;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    /* 右側パネルのスタイル */
-    .fixed-panel {
-        position: fixed;
-        right: 20px;
-        top: 50%;
-        transform: translateY(-50%);
-        background-color: #f0f0f0;
-        padding: 15px;
-        border-radius: 5px;
-        z-index: 10000; /* さらに高く */
-        min-width: 180px;
-        box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        display: block !important; /* 強制表示 */
-    }
-    .export-button {
-        margin-top: 10px;
-        background-color: #4CAF50;
-        color: white;
-        padding: 5px 10px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        width: 100%;
-    }
-    .export-button:hover {
-        background-color: #45a049;
-    }
-    .exporting-message {
-        font-size: 0.9em;
-        color: #666;
-        margin-top: 5px;
-    }
-    </style>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    """,
-    unsafe_allow_html=True
-)
-
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
     page_size = 100  # 1ページ100アイテム
@@ -278,33 +175,11 @@ def show_zip_file_list(sorted_paths):
     page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
     
     # ページ情報「◯/◯」を表示
-    st.write(f'<p class="page-info">ページ {page}/{total_pages}</p>', unsafe_allow_html=True)
+    st.write(f"ページ {page}/{total_pages}")
 
     start = (page - 1) * page_size
     end = start + page_size
     page_files = sorted_paths[start:end]
-
-    # 右側パネル（選択数とエクスポートボタン）
-    panel_placeholder = st.empty()
-    with panel_placeholder.container():
-        st.markdown('<div class="fixed-panel">', unsafe_allow_html=True)
-        selected_count = len(st.session_state.get("selected_files", []))
-        st.write(f"選択中: <strong>{selected_count}</strong>件", unsafe_allow_html=True)
-        if st.session_state.get("exporting", False):
-            st.markdown('<p class="exporting-message">エクスポート中...</p>', unsafe_allow_html=True)
-        else:
-            if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
-                st.session_state["exporting"] = True
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # TOPボタンを左下に配置
-    st.markdown(
-        '<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
-        '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
-        '</div>',
-        unsafe_allow_html=True
-    )
 
     # 2列レイアウト
     for i in range(0, len(page_files), 2):
@@ -317,19 +192,11 @@ def show_zip_file_list(sorted_paths):
                 key = make_safe_key(name)
 
                 with cols[j]:
-                    # アイテムコンテナ
-                    st.markdown('<div class="item-container">', unsafe_allow_html=True)
                     thumb = get_thumbnail_path(name)
                     if thumb:
-                        st.markdown(
-                            f'<img src="{thumb}" alt="{display_name}">',
-                            unsafe_allow_html=True
-                        )
+                        st.image(thumb, caption=display_name, use_column_width=True)
                     else:
-                        st.markdown(
-                            f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
-                            unsafe_allow_html=True
-                        )
+                        st.write("🖼️ サムネイルなし", display_name)
 
                     # チェックボックスの状態を即時管理
                     if f"cb_{key}" not in st.session_state:
@@ -342,7 +209,6 @@ def show_zip_file_list(sorted_paths):
                         on_change=update_selected_files,
                         args=(name, key)
                     )
-                    st.markdown('</div>', unsafe_allow_html=True)
 
 def update_selected_files(name, key):
     current_state = st.session_state[f"cb_{key}"]
@@ -376,6 +242,18 @@ sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
 if st.session_state.selected_files:
     st.markdown("### 選択中:")
     st.write(st.session_state.selected_files)
+
+# 上部にエクスポートボタン
+if "exporting" not in st.session_state:
+    st.session_state["exporting"] = False
+selected_count = len(st.session_state.get("selected_files", []))
+st.write(f"選択中: {selected_count}件")
+if st.session_state["exporting"]:
+    st.write("エクスポート中...")
+else:
+    if st.button("📤 エクスポート", key="export_top_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
+        st.session_state["exporting"] = True
+        st.rerun()
 
 # ZIP一覧表示
 show_zip_file_list(sorted_zip_paths)
@@ -420,5 +298,9 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
         else:
             st.success("✅ エクスポートが完了しました！")
     st.session_state["exporting"] = False  # 状態をリセット
+    st.session_state["selected_files"] = []  # 選択をリセット
+    for key in list(st.session_state.keys()):
+        if key.startswith("cb_"):
+            st.session_state[key] = False  # チェックボックスをリセット
     progress_bar.empty()  # プログレスバーをクリア
     st.rerun()  # 処理終了後に再描画
