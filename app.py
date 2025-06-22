@@ -281,14 +281,16 @@ def show_zip_file_list(sorted_paths):
     if st.session_state.get("selected_files", []):
         if "exporting" not in st.session_state:
             st.session_state["exporting"] = False
-        panel_html = f"""
-        <div class="fixed-panel">
-            <p>選択中: <strong>{selected_count}</strong>件</p>
-            {'<p class="exporting-message">エクスポート中...</p>' if st.session_state["exporting"] else ''}
-            {st.button("📤 エクスポート", key="export_button", help="選択したZIPをエクスポート") if not st.session_state["exporting"] else ''}
-        </div>
-        """
-        st.markdown(panel_html, unsafe_allow_html=True)
+        with st.container():
+            st.markdown('<div class="fixed-panel">', unsafe_allow_html=True)
+            st.write(f"選択中: <strong>{selected_count}</strong>件", unsafe_allow_html=True)
+            if st.session_state["exporting"]:
+                st.markdown('<p class="exporting-message">エクスポート中...</p>', unsafe_allow_html=True)
+            else:
+                if st.button("📤 エクスポート", key="export_button", help="選択したZIPをエクスポート"):
+                    st.session_state["exporting"] = True
+                    st.experimental_rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # TOPボタンを左下に配置
     st.markdown(
@@ -364,7 +366,7 @@ set_user_agent()  # デバイス情報を設定
 sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
 sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
 
-# エクスポートボタン（先頭に固定）＋選択中リスト
+# 選択中リスト
 if st.session_state.selected_files:
     st.markdown("### 選択中:")
     st.write(st.session_state.selected_files)
@@ -372,9 +374,8 @@ if st.session_state.selected_files:
 # ZIP一覧表示
 show_zip_file_list(sorted_zip_paths)
 
-# エクスポート処理（右側パネルと同期）
-if st.session_state.get("selected_files", []) and st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート"):
-    st.session_state["exporting"] = True
+# エクスポート処理
+if st.session_state.get("selected_files", []) and st.session_state.get("exporting", False):
     with st.spinner("エクスポート中..."):
         try:
             # SideBooksExportフォルダを空にする
@@ -412,4 +413,4 @@ if st.session_state.get("selected_files", []) and st.button("📤 選択中のZI
         else:
             st.success("✅ エクスポートが完了しました！")
     st.session_state["exporting"] = False
-    st.experimental_rerun()  # パネルを再描画
+    st.experimental_rerun()
