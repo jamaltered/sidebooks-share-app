@@ -168,18 +168,127 @@ def set_user_agent():
     if "session_id" not in st.session_state:
         st.session_state["session_id"] = str(uuid.uuid4())
 
+# カスタムCSSでレイアウトとチェックボックスを調整
+st.markdown(
+    """
+    <style>
+    /* ビューポート設定 */
+    @viewport {
+        width: device-width;
+        initial-scale: 1.0;
+    }
+    /* 各アイテムのスタイル */
+    .item-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px;
+    }
+    .item-container img {
+        max-width: 140px;
+        width: 100%;
+        height: auto;
+    }
+    /* チェックボックスを大きく */
+    .stCheckbox > div > label > input[type="checkbox"] {
+        transform: scale(1.5);
+        margin-right: 5px;
+    }
+    /* チェックボックスラベル */
+    .stCheckbox > div > label {
+        font-size: 1.2em;
+        transition: color 0.3s;
+    }
+    /* チェック時文字色を赤に */
+    .stCheckbox > div > label[data-baseweb="checkbox"] input:checked + span + span {
+        color: red;
+    }
+    /* サムネイルなしのテキスト */
+    .no-thumbnail {
+        font-size: 1.2em;
+    }
+    /* スマホ（iPhone 15想定） */
+    @media (max-width: 768px) {
+        .item-container img {
+            max-width: 120px;
+        }
+        .stCheckbox > div > label > input[type="checkbox"] {
+            transform: scale(1.3);
+        }
+        .stCheckbox > div > label {
+            font-size: 1.1em;
+        }
+        .no-thumbnail {
+            font-size: 1.1em;
+        }
+    }
+    /* ページ情報のスタイル */
+    .page-info {
+        font-size: 1.2em;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    /* 右側パネルのスタイル */
+    .fixed-panel {
+        position: fixed;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 5px;
+        z-index: 100;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .export-button {
+        margin-top: 10px;
+        background-color: #4CAF50;
+        color: white;
+        padding: 5px 10px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    .export-button:hover {
+        background-color: #45a049;
+    }
+    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    """,
+    unsafe_allow_html=True
+)
+
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
     page_size = 100  # 1ページ100アイテム
-    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)
+    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)  # 括弧を正しく閉じる
     page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
     
     # ページ情報「◯/◯」を表示
-    st.write(f"ページ {page}/{total_pages}")
+    st.write(f'<p class="page-info">ページ {page}/{total_pages}</p>', unsafe_allow_html=True)
 
     start = (page - 1) * page_size
     end = start + page_size
     page_files = sorted_paths[start:end]
+
+    # 右側パネル（選択数とエクスポートボタン）
+    selected_count = len(st.session_state.get("selected_files", []))
+    if st.session_state.get("selected_files", []):
+        panel_html = f"""
+        <div class="fixed-panel">
+            <p>選択中: <strong>{selected_count}</strong>件</p>
+            <button class="export-button" onclick="document.getElementById('export_button').click()">📤 エクスポート</button>
+        </div>
+        """
+        st.markdown(panel_html, unsafe_allow_html=True)
+
+    # TOPボタンを左下に配置
+    st.markdown(
+        '<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
+        '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
     # 2列レイアウト
     for i in range(0, len(page_files), 2):
@@ -192,11 +301,19 @@ def show_zip_file_list(sorted_paths):
                 key = make_safe_key(name)
 
                 with cols[j]:
+                    # アイテムコンテナ
+                    st.markdown('<div class="item-container">', unsafe_allow_html=True)
                     thumb = get_thumbnail_path(name)
                     if thumb:
-                        st.image(thumb, caption=display_name, use_column_width=True)
+                        st.markdown(
+                            f'<img src="{thumb}" alt="{display_name}">',
+                            unsafe_allow_html=True
+                        )
                     else:
-                        st.write("🖼️ サムネイルなし", display_name)
+                        st.markdown(
+                            f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
+                            unsafe_allow_html=True
+                        )
 
                     # チェックボックスの状態を即時管理
                     if f"cb_{key}" not in st.session_state:
@@ -209,6 +326,7 @@ def show_zip_file_list(sorted_paths):
                         on_change=update_selected_files,
                         args=(name, key)
                     )
+                    st.markdown('</div>', unsafe_allow_html=True)
 
 def update_selected_files(name, key):
     current_state = st.session_state[f"cb_{key}"]
@@ -230,7 +348,7 @@ st.title("📚 SideBooks ZIP共有アプリ")
 
 # 初期化
 if "selected_files" not in st.session_state:
-    st.session_state["selected_files"] = []
+    st.session_state.selected_files = []
 
 set_user_agent()  # デバイス情報を設定
 
@@ -238,69 +356,47 @@ set_user_agent()  # デバイス情報を設定
 sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
 sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
 
-# 選択中リスト
+# エクスポートボタン（先頭に固定）＋選択中リスト
 if st.session_state.selected_files:
     st.markdown("### 選択中:")
     st.write(st.session_state.selected_files)
+    if st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート"):
+        with st.spinner("エクスポート中..."):
+            try:
+                # SideBooksExportフォルダを空にする
+                for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
+                    dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
+            except Exception:
+                pass  # フォルダが無い場合など
 
-# 上部にエクスポートボタン
-if "exporting" not in st.session_state:
-    st.session_state["exporting"] = False
-selected_count = len(st.session_state.get("selected_files", []))
-st.write(f"選択中: {selected_count}件")
-if st.session_state["exporting"]:
-    st.write("エクスポート中...")
-else:
-    if st.button("📤 エクスポート", key="export_top_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
-        st.session_state["exporting"] = True
-        st.rerun()
+            failed = []
+            total = len(st.session_state.selected_files)
+            for i, name in enumerate(st.session_state.selected_files, 1):
+                src_path = f"{TARGET_FOLDER}/{name}"
+                dest_path = f"{EXPORT_FOLDER}/{name}"
+                progress = (i / total) * 100
+                st.progress(progress)
+                try:
+                    dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+                except dropbox.exceptions.ApiError as e:
+                    match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
+                    if match:
+                        try:
+                            dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
+                        except Exception as e:
+                            st.error(f"❌ {name} の代替コピーにも失敗: {e}")
+                            failed.append(name)
+                    else:
+                        st.error(f"❌ {name} のコピーに失敗（候補なし）")
+                        failed.append(name)
+            
+            # 出力ログを保存
+            save_export_log(st.session_state.selected_files)
+            
+            if failed:
+                st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
+            else:
+                st.success("✅ エクスポートが完了しました！")
 
 # ZIP一覧表示
 show_zip_file_list(sorted_zip_paths)
-
-# エクスポート処理
-if st.session_state.get("selected_files", []) and st.session_state.get("exporting", False):
-    progress_bar = st.empty()
-    with st.spinner("エクスポート中..."):
-        try:
-            # SideBooksExportフォルダを空にする
-            for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
-                dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
-        except Exception:
-            pass  # フォルダが無い場合など
-
-        failed = []
-        total = len(st.session_state.selected_files)
-        for i, name in enumerate(st.session_state.selected_files, 1):
-            src_path = f"{TARGET_FOLDER}/{name}"
-            dest_path = f"{EXPORT_FOLDER}/{name}"
-            progress = i / total  # 0.0から1.0の範囲
-            progress_bar.progress(progress)  # プログレスバー更新
-            try:
-                dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-            except dropbox.exceptions.ApiError:
-                match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
-                if match:
-                    try:
-                        dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
-                    except Exception as e:
-                        st.error(f"❌ {name} の代替コピーにも失敗: {e}")
-                        failed.append(name)
-                else:
-                    st.error(f"❌ {name} のコピーに失敗（候補なし）")
-                    failed.append(name)
-        
-        # 出力ログを保存
-        save_export_log(st.session_state.selected_files)
-        
-        if failed:
-            st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
-        else:
-            st.success("✅ エクスポートが完了しました！")
-    st.session_state["exporting"] = False  # 状態をリセット
-    st.session_state["selected_files"] = []  # 選択をリセット
-    for key in list(st.session_state.keys()):
-        if key.startswith("cb_"):
-            st.session_state[key] = False  # チェックボックスをリセット
-    progress_bar.empty()  # プログレスバーをクリア
-    st.rerun()  # 処理終了後に再描画
