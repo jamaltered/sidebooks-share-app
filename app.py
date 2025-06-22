@@ -104,12 +104,7 @@ def deduplicate_zip_paths(paths):
         name = os.path.basename(path)
         norm_name = normalize_filename(name)
 
-        series_pattern = r"(上|中|下|前編|後編|Ⅰ|Ⅱ|Ⅲ|Ⅳ|Ⅴ|Ⅵ|Ⅶ|Ⅷ|Ⅸ|Ⅹ)"
-        is_series = re.search(series_pattern, norm_name)
-
         key = re.sub(r"\s*\[DL版\]|\s*\(DL版\)", "", norm_name).strip()
-        if is_series:
-            key += "_series"
 
         if key in seen:
             if "[DL版]" in normalize_filename(seen[key]):
@@ -118,6 +113,7 @@ def deduplicate_zip_paths(paths):
                 seen[key] = path
         else:
             seen[key] = path
+
     return list(seen.values())
 
 # --- ZIPファイル表示処理 ---
