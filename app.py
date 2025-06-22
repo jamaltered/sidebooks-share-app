@@ -235,10 +235,11 @@ st.markdown(
         top: 50%;
         transform: translateY(-50%);
         background-color: #f0f0f0;
-        padding: 10px;
+        padding: 15px;
         border-radius: 5px;
         z-index: 100;
         box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        min-width: 150px;
     }
     .export-button {
         margin-top: 10px;
@@ -248,6 +249,7 @@ st.markdown(
         border: none;
         border-radius: 5px;
         cursor: pointer;
+        width: 100%;
     }
     .export-button:hover {
         background-color: #45a049;
@@ -287,7 +289,7 @@ def show_zip_file_list(sorted_paths):
             if st.session_state["exporting"]:
                 st.markdown('<p class="exporting-message">エクスポート中...</p>', unsafe_allow_html=True)
             else:
-                if st.button("📤 エクスポート", key="export_button", help="選択したZIPをエクスポート"):
+                if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート"):
                     st.session_state["exporting"] = True
                     st.experimental_rerun()
             st.markdown('</div>', unsafe_allow_html=True)
