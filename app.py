@@ -135,15 +135,15 @@ def show_zip_file_list(sorted_paths):
         with cols[0]:
             thumb = get_thumbnail_path(name)
             if thumb:
-                # サムネイルのキャプションを1.5倍
+                # サムネイルのみ表示（名前は削除）
                 st.markdown(
-                    f'<div><img src="{thumb}" style="width:100%;"><p style="font-size:150%; margin-top:5px;">{display_name}</p></div>',
+                    f'<img src="{thumb}" style="width:100%;">',
                     unsafe_allow_html=True
                 )
             else:
-                # サムネイルなしの場合も1.5倍
+                # サムネイルなしの場合、名前を省略
                 st.markdown(
-                    f'<p style="font-size:150%;">🖼️ {display_name}（サムネイルなし）</p>',
+                    f'<p style="font-size:150%;">🖼️ サムネイルなし</p>',
                     unsafe_allow_html=True
                 )
 
