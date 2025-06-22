@@ -10,6 +10,7 @@ import re
 import csv
 from datetime import datetime
 import uuid
+import io
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -114,15 +115,16 @@ def save_export_log(file_list):
     session_id = st.session_state.get("session_id", str(uuid.uuid4()))
     try:
         # 既存ファイルのチェック
+        existing_content = []
         try:
-            dbx.files_get_metadata(log_path)
-            mode = dropbox.files.WriteMode("append", None)
-            header_written = True
+            metadata, content = dbx.files_download(log_path)
+            existing_content = content.content.decode("utf-8-sig").splitlines()
+            if existing_content and not existing_content[0].startswith("DateTime"):
+                existing_content.insert(0, "DateTime,FileName,Device")
         except dropbox.exceptions.ApiError:
-            mode = dropbox.files.WriteMode("overwrite")
-            header_written = False
+            pass  # ファイルがない場合は新規作成
 
-        # CSVデータ準備
+        # 新しいデータ準備
         rows = []
         for name in file_list:
             rows.append([
@@ -130,25 +132,29 @@ def save_export_log(file_list):
                 name,
                 f"{device} (Session: {session_id})"
             ])
-        
-        # ヘッダー書き込み（初回のみ）
-        if not header_written:
+
+        # ヘッダー追加（初回のみ）
+        if not existing_content:
             rows.insert(0, ["DateTime", "FileName", "Device"])
+
+        # 既存内容と新しい内容を結合
+        all_rows = existing_content + [",".join(row) for row in rows]
 
         # 一時ファイルに書き込み
         import tempfile
         with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False) as temp_file:
             writer = csv.writer(temp_file)
-            writer.writerows(rows)
+            for row in all_rows:
+                writer.writerow(row.split(","))
 
         # 一時ファイルをDropboxにアップロード
         with open(temp_file.name, "rb") as f:
-            dbx.files_upload(f.read(), log_path, mode=mode)
+            dbx.files_upload(f.read(), log_path, mode=dropbox.files.WriteMode("overwrite"))
         
         os.unlink(temp_file.name)  # 一時ファイル削除
     except Exception as e:
-        st.error(f"出力ログ保存失敗: {e}")
-        logger.error(f"出力ログ保存失敗: {log_path}, エラー: {e}")
+        st.error(f"出力ログ保存失敗: {str(e)}")
+        logger.error(f"出力ログ保存失敗: {log_path}, エラー: {str(e)}", exc_info=True)
 
 # ユーザーエージェントを取得（デバイス情報）
 def set_user_agent():
@@ -184,21 +190,21 @@ st.markdown(
     }
     /* チェックボックスを大きく */
     .stCheckbox > div > label > input[type="checkbox"] {
-        transform: scale(1.5) !important;
+        transform: scale(1.5);
         margin-right: 5px;
     }
     /* チェックボックスラベル */
     .stCheckbox > div > label {
-        font-size: 1.2em !important;
+        font-size: 1.2em;
         transition: color 0.3s;
     }
     /* チェック時文字色を赤に */
     .stCheckbox > div > label[data-baseweb="checkbox"] input:checked + span + span {
-        color: red !important;
+        color: red;
     }
     /* サムネイルなしのテキスト */
     .no-thumbnail {
-        font-size: 1.2em !important;
+        font-size: 1.2em;
     }
     /* スマホ（iPhone 15想定） */
     @media (max-width: 768px) {
@@ -206,13 +212,13 @@ st.markdown(
             max-width: 120px;
         }
         .stCheckbox > div > label > input[type="checkbox"] {
-            transform: scale(1.3) !important;
+            transform: scale(1.3);
         }
         .stCheckbox > div > label {
-            font-size: 1.1em !important;
+            font-size: 1.1em;
         }
         .no-thumbnail {
-            font-size: 1.1em !important;
+            font-size: 1.1em;
         }
     }
     /* ページ情報のスタイル */
@@ -280,9 +286,10 @@ def show_zip_file_list(sorted_paths):
                         display_name,
                         key=f"cb_{key}",
                         value=st.session_state[f"cb_{key}"],
-                        label_visibility="visible",
-                        on_change=lambda n=name, k=key: update_selected_files(n, k)
+                        label_visibility="visible"
                     )
+                    if checked != st.session_state[f"cb_{key}"]:
+                        update_selected_files(name, key)
                     st.markdown('</div>', unsafe_allow_html=True)
 
 def update_selected_files(name, key):
