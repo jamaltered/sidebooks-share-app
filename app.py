@@ -112,6 +112,29 @@ def find_similar_path(filename, zip_paths):
     candidates = difflib.get_close_matches(filename, zip_paths, n=1, cutoff=0.7)
     return candidates[0] if candidates else None
 
+# カスタムCSSでチェックボックスと名前を横に並べ、見た目を調整
+st.markdown(
+    """
+    <style>
+    /* チェックボックスとラベルを横に並べる */
+    .stCheckbox > div {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    /* チェックボックスのラベルフォントサイズを調整 */
+    .stCheckbox > div > label {
+        font-size: 1.2em !important;
+    }
+    /* サムネイルなしのテキストフォントサイズ */
+    .no-thumbnail {
+        font-size: 1.2em !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
     page_size = 50
@@ -122,49 +145,48 @@ def show_zip_file_list(sorted_paths):
     page_files = sorted_paths[start:end]
 
     # TOPボタンを左下に配置
-    st.markdown('<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
-                '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
-                '</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
+        '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
     for path in page_files:
         name = os.path.basename(path)
         display_name = format_display_name(name)
         key = make_safe_key(name)
 
-        cols = st.columns([2, 3])  # 左列: サムネイル, 右列: チェックボックス＋名前
+        cols = st.columns([1, 4])  # 左列: サムネイル（狭く）, 右列: チェックボックス＋名前
         with cols[0]:
             thumb = get_thumbnail_path(name)
             if thumb:
-                # サムネイルのみ表示（名前は削除）
+                # サムネイルをAmazon風に小さく（max-width: 180px）
                 st.markdown(
-                    f'<img src="{thumb}" style="width:100%;">',
+                    f'<img src="{thumb}" style="max-width: 180px; width: 100%;">',
                     unsafe_allow_html=True
                 )
             else:
-                # サムネイルなしの場合、名前を省略
+                # サムネイルなし
                 st.markdown(
-                    f'<p style="font-size:150%;">🖼️ サムネイルなし</p>',
+                    f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
                     unsafe_allow_html=True
                 )
 
         with cols[1]:
             # チェックボックスと名前を横に並べる
-            with st.container():
-                st.markdown(
-                    '<div style="display: flex; align-items: center; gap: 10px;">'
-                    f'<input type="checkbox" id="cb_{key}" {"checked" if name in st.session_state.selected_files else ""}>'
-                    f'<label for="cb_{key}" style="font-size:150%;">{display_name}</label>'
-                    '</div>',
-                    unsafe_allow_html=True
-                )
-                # Streamlitのチェックボックス状態を同期
-                checked = st.checkbox("", key=f"cb_{key}", value=(name in st.session_state.selected_files), label_visibility="hidden")
-                if checked:
-                    if name not in st.session_state.selected_files:
-                        st.session_state.selected_files.append(name)
-                else:
-                    if name in st.session_state.selected_files:
-                        st.session_state.selected_files.remove(name)
+            checked = st.checkbox(
+                display_name,
+                key=f"cb_{key}",
+                value=(name in st.session_state.selected_files),
+                label_visibility="visible"
+            )
+            if checked:
+                if name not in st.session_state.selected_files:
+                    st.session_state.selected_files.append(name)
+            else:
+                if name in st.session_state.selected_files:
+                    st.session_state.selected_files.remove(name)
 
 # ---------------------- アプリ開始 ------------------------
 
