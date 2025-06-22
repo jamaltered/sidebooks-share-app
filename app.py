@@ -49,10 +49,10 @@ def normalize_filename(zip_name):
         author, title = match.groups()
         return f"[{author}] {title}".strip()
     else:
-        # フォールバック
         return os.path.splitext(zip_name)[0]
 
-# サムネイルパスを生成
+# サムネイルパスを生成（キャッシュ強化）
+@st.cache_data
 def get_thumbnail_path(name):
     thumb_name = normalize_filename(os.path.basename(name))
     thumb_path = f"{THUMBNAIL_FOLDER}/{thumb_name}.jpg"
@@ -112,31 +112,40 @@ def find_similar_path(filename, zip_paths):
     candidates = difflib.get_close_matches(filename, zip_paths, n=1, cutoff=0.7)
     return candidates[0] if candidates else None
 
-# カスタムCSSで2列グリッド、チェックボックス、フォントサイズを調整
+# カスタムCSSで2列グリッド、Safari互換性を強化
 st.markdown(
     """
     <style>
+    /* ビューポート設定 */
+    @viewport {
+        width: device-width;
+        initial-scale: 1.0;
+    }
     /* グリッドコンテナ */
     .grid-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 10px !important;
         padding: 10px;
+        width: 100%;
+        box-sizing: border-box;
     }
     /* 各グリッドアイテム */
     .grid-item {
-        display: flex;
+        display: flex !important;
         align-items: center;
         gap: 10px;
+        padding: 5px;
     }
     /* サムネイル */
     .grid-item img {
-        max-width: 150px;
+        max-width: 150px !important;
         width: 100%;
+        height: auto;
     }
     /* チェックボックスとラベル */
     .stCheckbox > div {
-        display: flex;
+        display: flex !important;
         align-items: center;
         gap: 10px;
     }
@@ -147,14 +156,14 @@ st.markdown(
     .no-thumbnail {
         font-size: 1.2em !important;
     }
-    /* スマホでも2列を維持 */
-    @media (max-width: 600px) {
+    /* スマホ（iPhone 15想定） */
+    @media (max-width: 768px) {
         .grid-container {
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 5px !important;
         }
         .grid-item img {
-            max-width: 120px;
+            max-width: 140px !important;
         }
         .stCheckbox > div > label {
             font-size: 1.1em !important;
@@ -163,7 +172,14 @@ st.markdown(
             font-size: 1.1em !important;
         }
     }
+    /* ページ情報のスタイル */
+    .page-info {
+        font-size: 1.2em;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
     </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     """,
     unsafe_allow_html=True
 )
@@ -175,7 +191,7 @@ def show_zip_file_list(sorted_paths):
     page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
     
     # ページ情報「◯/◯」を表示
-    st.markdown(f"**ページ {page}/{total_pages}**")
+    st.write(f'<p class="page-info">ページ {page}/{total_pages}</p>', unsafe_allow_html=True)
 
     start = (page - 1) * page_size
     end = start + page_size
