@@ -295,7 +295,7 @@ def show_zip_file_list(sorted_paths):
         else:
             if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
                 st.session_state["exporting"] = True
-                st.experimental_rerun()
+                st.rerun()  # experimental_rerun を rerun に変更
         st.markdown('</div>', unsafe_allow_html=True)
 
     # TOPボタンを左下に配置
@@ -419,4 +419,4 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
         else:
             st.success("✅ エクスポートが完了しました！")
     st.session_state["exporting"] = False
-    st.experimental_rerun()
+    st.rerun()  # experimental_rerun を rerun に変更
