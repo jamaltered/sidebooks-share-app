@@ -151,29 +151,7 @@ st.markdown('<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100
             '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
             '</div>', unsafe_allow_html=True)
 
-for i, path in enumerate(page_files):
-    name = os.path.basename(path)
-    display_name = format_display_name(name)
-    key = make_safe_key(name)
-
-    thumb = get_thumbnail_path(name)
-    cols = st.columns([1, 5])
-    with cols[0]:
-        if thumb:
-            st.image(thumb, caption="", use_container_width=True)
-        else:
-            st.markdown("🖼️ サムネイルなし")
-    with cols[1]:
-        if f"cb_{key}" not in st.session_state:
-            st.session_state[f"cb_{key}"] = False
-        if st.checkbox(display_name, key=f"cb_{key}"):
-            if name not in st.session_state.selected_files:
-                st.session_state.selected_files.append(name)
-        else:
-            if name in st.session_state.selected_files:
-                st.session_state.selected_files.remove(name)
-
-# --- エクスポート処理 ---
+# --- エクスポート処理（上部に移動） ---
 if st.session_state.selected_files:
     st.markdown("### 選択中:")
     st.write(st.session_state.selected_files)
@@ -216,3 +194,26 @@ if st.session_state.selected_files:
             key = make_safe_key(name)
             st.session_state[f"cb_{key}"] = False
         st.session_state.selected_files = []
+
+# --- 一覧描画 ---
+for i, path in enumerate(page_files):
+    name = os.path.basename(path)
+    display_name = format_display_name(name)
+    key = make_safe_key(name)
+
+    thumb = get_thumbnail_path(name)
+    cols = st.columns([1, 5])
+    with cols[0]:
+        if thumb:
+            st.image(thumb, caption="", use_container_width=True)
+        else:
+            st.markdown("🖼️ サムネイルなし")
+    with cols[1]:
+        if f"cb_{key}" not in st.session_state:
+            st.session_state[f"cb_{key}"] = False
+        if st.checkbox(display_name, key=f"cb_{key}"):
+            if name not in st.session_state.selected_files:
+                st.session_state.selected_files.append(name)
+        else:
+            if name in st.session_state.selected_files:
+                st.session_state.selected_files.remove(name)
