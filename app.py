@@ -245,6 +245,7 @@ st.markdown(
         z-index: 1000; /* 優先度を高く */
         min-width: 180px; /* サイズを保証 */
         box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        display: block; /* 強制表示 */
     }
     .export-button {
         margin-top: 10px;
@@ -295,7 +296,7 @@ def show_zip_file_list(sorted_paths):
         else:
             if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
                 st.session_state["exporting"] = True
-                st.rerun()  # 再描画メソッドを修正
+                st.rerun()  # 再描画
         st.markdown('</div>', unsafe_allow_html=True)
 
     # TOPボタンを左下に配置
@@ -395,8 +396,8 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
         for i, name in enumerate(st.session_state.selected_files, 1):
             src_path = f"{TARGET_FOLDER}/{name}"
             dest_path = f"{EXPORT_FOLDER}/{name}"
-            progress = i / total  # 0.0から1.0の範囲に修正
-            st.progress(progress)  # 修正後の値を渡す
+            progress = i / total  # 0.0から1.0の範囲
+            st.progress(progress)  # プログレスバー更新
             try:
                 dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
             except dropbox.exceptions.ApiError:
@@ -418,5 +419,5 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
             st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
         else:
             st.success("✅ エクスポートが完了しました！")
-    st.session_state["exporting"] = False
-    st.rerun()  # 再描画メソッドを修正
+    st.session_state["exporting"] = False  # 状態をリセット
+    st.rerun()  # 処理終了後に再描画
