@@ -12,6 +12,7 @@ from datetime import datetime
 import uuid
 import io
 import pytz
+import pykakasi
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,9 @@ dbx = dropbox.Dropbox(
     app_secret=APP_SECRET,
     oauth2_refresh_token=REFRESH_TOKEN
 )
+
+# pykakasi初期化
+kakasi = pykakasi.kakasi()
 
 # ファイル一覧読み込み（zip_file_list.txt）
 @st.cache_data
@@ -120,12 +124,17 @@ def sort_zip_paths(paths, sort_type="名前順"):
                 return name
         return name
 
+    def get_yomi(text):
+        result = kakasi.convert(text)
+        return "".join([item['hira'] for item in result])
+
     if sort_type == "名前順":
         return sorted(paths, key=lambda x: os.path.basename(x).lower())
     elif sort_type == "作家順":
-        return sorted(paths, key=lambda x: (get_author(os.path.basename(x)).lower(), get_title(os.path.basename(x)).lower()))
+        return sorted(paths, key=lambda x: (get_yomi(get_author(os.path.basename(x))), get_title(os.path.basename(x)).lower()))
     else:
         return paths
+
 
 # 近似検索で元ファイルパスを特定
 def find_similar_path(filename, zip_paths):
