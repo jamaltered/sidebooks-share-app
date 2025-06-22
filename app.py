@@ -281,12 +281,13 @@ def show_zip_file_list(sorted_paths):
                         key=f"cb_{key}",
                         value=st.session_state[f"cb_{key}"],
                         label_visibility="visible",
-                        on_change=lambda x, n=name, k=key: update_selected_files(n, k)
+                        on_change=lambda n=name, k=key: update_selected_files(n, k)
                     )
                     st.markdown('</div>', unsafe_allow_html=True)
 
 def update_selected_files(name, key):
-    if st.session_state[f"cb_{key}"]:
+    current_state = st.session_state[f"cb_{key}"]
+    if current_state:
         if name not in st.session_state.get("selected_files", []):
             if "selected_files" not in st.session_state:
                 st.session_state["selected_files"] = []
@@ -294,6 +295,7 @@ def update_selected_files(name, key):
     else:
         if name in st.session_state.get("selected_files", []):
             st.session_state.selected_files.remove(name)
+    logger.info(f"Updated selected_files: {st.session_state.selected_files} for key {key}")
 
 # ---------------------- アプリ開始 ------------------------
 
