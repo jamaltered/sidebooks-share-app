@@ -252,6 +252,11 @@ st.markdown(
     .export-button:hover {
         background-color: #45a049;
     }
+    .exporting-message {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 5px;
+    }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     """,
@@ -261,7 +266,7 @@ st.markdown(
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
     page_size = 100  # 1ページ100アイテム
-    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)  # 括弧を正しく閉じる
+    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)
     page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
     
     # ページ情報「◯/◯」を表示
@@ -274,10 +279,13 @@ def show_zip_file_list(sorted_paths):
     # 右側パネル（選択数とエクスポートボタン）
     selected_count = len(st.session_state.get("selected_files", []))
     if st.session_state.get("selected_files", []):
+        if "exporting" not in st.session_state:
+            st.session_state["exporting"] = False
         panel_html = f"""
         <div class="fixed-panel">
             <p>選択中: <strong>{selected_count}</strong>件</p>
-            <button class="export-button" onclick="document.getElementById('export_button').click()">📤 エクスポート</button>
+            {'<p class="exporting-message">エクスポート中...</p>' if st.session_state["exporting"] else ''}
+            {st.button("📤 エクスポート", key="export_button", help="選択したZIPをエクスポート") if not st.session_state["exporting"] else ''}
         </div>
         """
         st.markdown(panel_html, unsafe_allow_html=True)
@@ -348,7 +356,7 @@ st.title("📚 SideBooks ZIP共有アプリ")
 
 # 初期化
 if "selected_files" not in st.session_state:
-    st.session_state.selected_files = []
+    st.session_state["selected_files"] = []
 
 set_user_agent()  # デバイス情報を設定
 
@@ -360,43 +368,48 @@ sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
 if st.session_state.selected_files:
     st.markdown("### 選択中:")
     st.write(st.session_state.selected_files)
-    if st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート"):
-        with st.spinner("エクスポート中..."):
-            try:
-                # SideBooksExportフォルダを空にする
-                for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
-                    dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
-            except Exception:
-                pass  # フォルダが無い場合など
-
-            failed = []
-            total = len(st.session_state.selected_files)
-            for i, name in enumerate(st.session_state.selected_files, 1):
-                src_path = f"{TARGET_FOLDER}/{name}"
-                dest_path = f"{EXPORT_FOLDER}/{name}"
-                progress = (i / total) * 100
-                st.progress(progress)
-                try:
-                    dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-                except dropbox.exceptions.ApiError:
-                    match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
-                    if match:
-                        try:
-                            dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
-                        except Exception as e:
-                            st.error(f"❌ {name} の代替コピーにも失敗: {e}")
-                            failed.append(name)
-                    else:
-                        st.error(f"❌ {name} のコピーに失敗（候補なし）")
-                        failed.append(name)
-            
-            # 出力ログを保存
-            save_export_log(st.session_state.selected_files)
-            
-            if failed:
-                st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
-            else:
-                st.success("✅ エクスポートが完了しました！")
 
 # ZIP一覧表示
 show_zip_file_list(sorted_zip_paths)
+
+# エクスポート処理（右側パネルと同期）
+if st.session_state.get("selected_files", []) and st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート"):
+    st.session_state["exporting"] = True
+    with st.spinner("エクスポート中..."):
+        try:
+            # SideBooksExportフォルダを空にする
+            for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
+                dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
+        except Exception:
+            pass  # フォルダが無い場合など
+
+        failed = []
+        total = len(st.session_state.selected_files)
+        for i, name in enumerate(st.session_state.selected_files, 1):
+            src_path = f"{TARGET_FOLDER}/{name}"
+            dest_path = f"{EXPORT_FOLDER}/{name}"
+            progress = (i / total) * 100
+            st.progress(progress)
+            try:
+                dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+            except dropbox.exceptions.ApiError:
+                match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
+                if match:
+                    try:
+                        dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
+                    except Exception as e:
+                        st.error(f"❌ {name} の代替コピーにも失敗: {e}")
+                        failed.append(name)
+                else:
+                    st.error(f"❌ {name} のコピーに失敗（候補なし）")
+                    failed.append(name)
+        
+        # 出力ログを保存
+        save_export_log(st.session_state.selected_files)
+        
+        if failed:
+            st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
+        else:
+            st.success("✅ エクスポートが完了しました！")
+    st.session_state["exporting"] = False
+    st.experimental_rerun()  # パネルを再描画
