@@ -96,8 +96,8 @@ def sort_zip_paths(paths, sort_type="名前順"):
         return sorted(paths, key=lambda x: os.path.basename(x).lower())
     elif sort_type == "作家順":
         return sorted(paths, key=lambda x: get_author(os.path.basename(x)).lower())
-    else:
-        return paths
+    else:  # "元の順序"
+        return paths  # ソートなしで元の順序を維持
 
 # エクスポートログ保存
 def save_export_log(file_list):
@@ -112,7 +112,7 @@ def find_similar_path(filename, zip_paths):
     candidates = difflib.get_close_matches(filename, zip_paths, n=1, cutoff=0.7)
     return candidates[0] if candidates else None
 
-# カスタムCSSで2列グリッド、Safari互換性を強化
+# カスタムCSSでレイアウトを調整
 st.markdown(
     """
     <style>
@@ -121,31 +121,21 @@ st.markdown(
         width: device-width;
         initial-scale: 1.0;
     }
-    /* グリッドコンテナ */
-    .grid-container {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        gap: 10px !important;
-        padding: 10px;
-        width: 100%;
-        box-sizing: border-box;
-    }
-    /* 各グリッドアイテム */
-    .grid-item {
-        display: flex !important;
+    /* 各アイテムのスタイル */
+    .item-container {
+        display: flex;
         align-items: center;
         gap: 10px;
         padding: 5px;
     }
-    /* サムネイル */
-    .grid-item img {
-        max-width: 150px !important;
+    .item-container img {
+        max-width: 140px;
         width: 100%;
         height: auto;
     }
     /* チェックボックスとラベル */
     .stCheckbox > div {
-        display: flex !important;
+        display: flex;
         align-items: center;
         gap: 10px;
     }
@@ -158,12 +148,8 @@ st.markdown(
     }
     /* スマホ（iPhone 15想定） */
     @media (max-width: 768px) {
-        .grid-container {
-            grid-template-columns: 1fr 1fr !important;
-            gap: 5px !important;
-        }
-        .grid-item img {
-            max-width: 140px !important;
+        .item-container img {
+            max-width: 120px;
         }
         .stCheckbox > div > label {
             font-size: 1.1em !important;
@@ -205,44 +191,45 @@ def show_zip_file_list(sorted_paths):
         unsafe_allow_html=True
     )
 
-    # グリッドコンテナ
-    with st.container():
-        st.markdown('<div class="grid-container">', unsafe_allow_html=True)
-        for path in page_files:
-            name = os.path.basename(path)
-            display_name = format_display_name(name)
-            key = make_safe_key(name)
+    # 2列レイアウト
+    for i in range(0, len(page_files), 2):
+        cols = st.columns([1, 1])  # 2列
+        for j in range(2):
+            if i + j < len(page_files):
+                path = page_files[i + j]
+                name = os.path.basename(path)
+                display_name = format_display_name(name)
+                key = make_safe_key(name)
 
-            # グリッドアイテム
-            st.markdown('<div class="grid-item">', unsafe_allow_html=True)
-            thumb = get_thumbnail_path(name)
-            if thumb:
-                st.markdown(
-                    f'<img src="{thumb}" alt="{display_name}">',
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
-                    unsafe_allow_html=True
-                )
+                with cols[j]:
+                    # アイテムコンテナ
+                    st.markdown('<div class="item-container">', unsafe_allow_html=True)
+                    thumb = get_thumbnail_path(name)
+                    if thumb:
+                        st.markdown(
+                            f'<img src="{thumb}" alt="{display_name}">',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.markdown(
+                            f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
+                            unsafe_allow_html=True
+                        )
 
-            checked = st.checkbox(
-                display_name,
-                key=f"cb_{key}",
-                value=(name in st.session_state.selected_files),
-                label_visibility="visible"
-            )
-            if checked:
-                if name not in st.session_state.selected_files:
-                    st.session_state.selected_files.append(name)
-            else:
-                if name in st.session_state.selected_files:
-                    st.session_state.selected_files.remove(name)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+                    checked = st.checkbox(
+                        display_name,
+                        key=f"cb_{key}",
+                        value=(name in st.session_state.selected_files),
+                        label_visibility="visible"
+                    )
+                    if checked:
+                        if name not in st.session_state.selected_files:
+                            st.session_state.selected_files.append(name)
+                    else:
+                        if name in st.session_state.selected_files:
+                            st.session_state.selected_files.remove(name)
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------- アプリ開始 ------------------------
 
@@ -254,8 +241,8 @@ st.title("📚 SideBooks ZIP共有アプリ")
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = []
 
-# 並び順セレクト
-sort_option = st.selectbox("表示順", ["名前順", "作家順"])
+# 並び順セレクト（「元の順序」追加）
+sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
 sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
 
 # エクスポートボタン（先頭に固定）
