@@ -242,10 +242,10 @@ st.markdown(
         background-color: #f0f0f0;
         padding: 15px;
         border-radius: 5px;
-        z-index: 1000; /* 優先度を高く */
-        min-width: 180px; /* サイズを保証 */
+        z-index: 10000; /* さらに高く */
+        min-width: 180px;
         box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        display: block; /* 強制表示 */
+        display: block !important; /* 強制表示 */
     }
     .export-button {
         margin-top: 10px;
@@ -285,18 +285,17 @@ def show_zip_file_list(sorted_paths):
     page_files = sorted_paths[start:end]
 
     # 右側パネル（選択数とエクスポートボタン）
-    if "exporting" not in st.session_state:
-        st.session_state["exporting"] = False
-    with st.container():
+    panel_placeholder = st.empty()
+    with panel_placeholder.container():
         st.markdown('<div class="fixed-panel">', unsafe_allow_html=True)
         selected_count = len(st.session_state.get("selected_files", []))
         st.write(f"選択中: <strong>{selected_count}</strong>件", unsafe_allow_html=True)
-        if st.session_state["exporting"]:
+        if st.session_state.get("exporting", False):
             st.markdown('<p class="exporting-message">エクスポート中...</p>', unsafe_allow_html=True)
         else:
             if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
                 st.session_state["exporting"] = True
-                st.rerun()  # 再描画
+                st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
     # TOPボタンを左下に配置
@@ -383,6 +382,7 @@ show_zip_file_list(sorted_zip_paths)
 
 # エクスポート処理
 if st.session_state.get("selected_files", []) and st.session_state.get("exporting", False):
+    progress_bar = st.empty()
     with st.spinner("エクスポート中..."):
         try:
             # SideBooksExportフォルダを空にする
@@ -397,7 +397,7 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
             src_path = f"{TARGET_FOLDER}/{name}"
             dest_path = f"{EXPORT_FOLDER}/{name}"
             progress = i / total  # 0.0から1.0の範囲
-            st.progress(progress)  # プログレスバー更新
+            progress_bar.progress(progress)  # プログレスバー更新
             try:
                 dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
             except dropbox.exceptions.ApiError:
@@ -420,4 +420,5 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
         else:
             st.success("✅ エクスポートが完了しました！")
     st.session_state["exporting"] = False  # 状態をリセット
+    progress_bar.empty()  # プログレスバーをクリア
     st.rerun()  # 処理終了後に再描画
