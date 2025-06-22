@@ -11,6 +11,7 @@ import csv
 from datetime import datetime
 import uuid
 import io
+import pytz
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -110,7 +111,7 @@ def find_similar_path(filename, zip_paths):
 
 # 出力ログをCSVに保存
 def save_export_log(file_list):
-    log_path = f"/log/output_log_{datetime.now().strftime('%Y%m%d')}.csv"
+    log_path = f"/log/output_log_{datetime.now(pytz.timezone('Asia/Tokyo')).strftime('%Y%m%d')}.csv"
     device = st.session_state.get("user_agent", "Unknown Device")
     session_id = st.session_state.get("session_id", str(uuid.uuid4()))
     try:
@@ -128,7 +129,7 @@ def save_export_log(file_list):
         rows = []
         for name in file_list:
             rows.append([
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S JST"),
+                datetime.now(pytz.timezone('Asia/Tokyo')).strftime("%Y-%m-%d %H:%M:%S JST"),
                 name,
                 f"{device} (Session: {session_id})"
             ])
