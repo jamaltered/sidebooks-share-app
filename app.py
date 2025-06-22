@@ -159,7 +159,10 @@ for i, path in enumerate(page_files):
     thumb = get_thumbnail_path(name)
     cols = st.columns([1, 5])
     with cols[0]:
-        st.image(thumb if thumb else "", caption="" if thumb else "🖼️ サムネイルなし", use_column_width=True)
+        if thumb:
+            st.image(thumb, caption="", use_container_width=True)
+        else:
+            st.markdown("🖼️ サムネイルなし")
     with cols[1]:
         if f"cb_{key}" not in st.session_state:
             st.session_state[f"cb_{key}"] = False
