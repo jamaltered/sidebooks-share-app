@@ -103,7 +103,13 @@ def deduplicate_zip_paths(paths):
     for path in paths:
         name = os.path.basename(path)
         norm_name = normalize_filename(name)
-        key = re.sub(r"\s*\[DL版\]|\s*\(DL版\)", "", norm_name)
+
+        series_pattern = r"(上|中|下|前編|後編|Ⅰ|Ⅱ|Ⅲ|Ⅳ|Ⅴ|Ⅵ|Ⅶ|Ⅷ|Ⅸ|Ⅹ)"
+        is_series = re.search(series_pattern, norm_name)
+
+        key = re.sub(r"\s*\[DL版\]|\s*\(DL版\)", "", norm_name).strip()
+        if is_series:
+            key += "_series"
 
         if key in seen:
             if "[DL版]" in normalize_filename(seen[key]):
@@ -114,123 +120,97 @@ def deduplicate_zip_paths(paths):
             seen[key] = path
     return list(seen.values())
 
-def save_export_log(file_list):
-    log_path = "/log/output_log.csv"
-    device = st.session_state.get("user_agent", "Unknown Device")
-    session_id = st.session_state.get("session_id", str(uuid.uuid4()))
-    try:
-        existing_content = []
+# --- ZIPファイル表示処理 ---
+def show_zip_file_list(zip_paths):
+    per_page = 20
+    total_pages = (len(zip_paths) + per_page - 1) // per_page
+    current_page = st.number_input("ページ選択", 1, total_pages, 1)
+
+    start = (current_page - 1) * per_page
+    end = start + per_page
+    current_files = zip_paths[start:end]
+
+    for path in current_files:
+        name = os.path.basename(path)
+        display_name = format_display_name(normalize_filename(name))
+        key = make_safe_key(name)
+
+        cols = st.columns([1, 5])
+        with cols[0]:
+            thumb = get_thumbnail_path(name)
+            if thumb:
+                st.image(thumb, use_container_width=True)
+            else:
+                st.markdown("🖼️ サムネなし")
+
+        with cols[1]:
+            checked = st.checkbox(display_name, key=f"cb_{key}", value=key in st.session_state.selected_files)
+            if checked:
+                if key not in st.session_state.selected_files:
+                    st.session_state.selected_files.append(key)
+            else:
+                if key in st.session_state.selected_files:
+                    st.session_state.selected_files.remove(key)
+
+# --- エクスポート処理 ---
+def export_selected_files(zip_paths):
+    zip_path_dict = {make_safe_key(os.path.basename(p)): p for p in zip_paths}
+    export_list = [zip_path_dict[k] for k in st.session_state.selected_files if k in zip_path_dict]
+
+    if not export_list:
+        st.warning("エクスポート対象が選択されていません。")
+        return
+
+    with st.spinner("エクスポート中..."):
         try:
-            metadata, content = dbx.files_download(log_path)
-            existing_content = content.content.decode("utf-8-sig").splitlines()
-        except dropbox.exceptions.ApiError:
+            dbx.files_delete_v2(EXPORT_FOLDER)
+        except:
             pass
+        dbx.files_create_folder_v2(EXPORT_FOLDER)
 
-        rows = []
-        for name in file_list:
-            rows.append([
-                datetime.now(pytz.timezone('Asia/Tokyo')).strftime("%Y-%m-%d %H:%M:%S JST"),
-                name,
-                f"{device} (Session: {session_id})"
-            ])
+        for path in export_list:
+            dest = f"{EXPORT_FOLDER}/{os.path.basename(path)}"
+            try:
+                dbx.files_copy_v2(path, dest)
+            except dropbox.exceptions.ApiError:
+                sim_path = find_similar_path(path, zip_paths)
+                if sim_path:
+                    try:
+                        dbx.files_copy_v2(sim_path, dest)
+                    except Exception as e:
+                        logger.warning(f"コピー失敗: {sim_path} -> {dest}: {e}")
+                else:
+                    logger.warning(f"近似ファイル見つからず: {path}")
 
-        if not existing_content:
-            rows.insert(0, ["DateTime", "FileName", "Device"])
+        log_path = f"{TARGET_FOLDER}/export_log.csv"
+        log_data = [[datetime.now(pytz.timezone("Asia/Tokyo")).isoformat(), os.path.basename(p)] for p in export_list]
 
-        all_rows = existing_content + ["...".join(row) for row in rows]
+        with tempfile.NamedTemporaryFile("w", delete=False, newline="", encoding="utf-8") as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(["timestamp", "filename"])
+            writer.writerows(log_data)
+            tmp_path = tmp.name
 
-        with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False) as temp_file:
-            writer = csv.writer(temp_file)
-            for row in all_rows:
-                writer.writerow(row.split(","))
-
-        with open(temp_file.name, "rb") as f:
+        with open(tmp_path, "rb") as f:
             dbx.files_upload(f.read(), log_path, mode=dropbox.files.WriteMode("overwrite"))
-        os.unlink(temp_file.name)
-    except Exception as e:
-        st.error(f"出力ログ保存失敗: {str(e)}")
 
-# --- メイン処理 ---
-zip_paths = load_zip_file_list()
-zip_paths = deduplicate_zip_paths(zip_paths)
-sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
+        st.success("エクスポートが完了しました！")
+
+        st.session_state.selected_files = []
+        for key in list(st.session_state.keys()):
+            if key.startswith("cb_"):
+                st.session_state[key] = False
+
+# --- メイン実行部 ---
+zip_paths = deduplicate_zip_paths(load_zip_file_list())
+sort_option = st.selectbox("並び順", ["名前順", "作家順"])
 sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
 
-page_size = 100
-total_pages = max(1, (len(sorted_zip_paths) - 1) // page_size + 1)
-page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
+show_zip_file_list(sorted_zip_paths)
 
-start = (page - 1) * page_size
-end = start + page_size
-page_files = sorted_zip_paths[start:end]
-
-st.markdown('<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
-            '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
-            '</div>', unsafe_allow_html=True)
-
-# --- エクスポート処理（上部に移動） ---
 if st.session_state.selected_files:
-    st.markdown("### 選択中:")
-    st.write(st.session_state.selected_files)
+    st.markdown("---")
+    if st.button("📤 選択したZIPをエクスポート"):
+        export_selected_files(zip_paths)
 
-    if st.button("📤 選択中のZIPをエクスポート（SideBooks用）"):
-        with st.spinner("📦 エクスポート中..."):
-            try:
-                for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
-                    dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
-            except Exception:
-                pass
-
-            failed = []
-            for idx, name in enumerate(st.session_state.selected_files, start=1):
-                st.write(f"→ {idx}. {name} をエクスポート中...")
-                src_path = f"{TARGET_FOLDER}/{name}"
-                dest_path = f"{EXPORT_FOLDER}/{name}"
-                try:
-                    dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-                except dropbox.exceptions.ApiError:
-                    match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
-                    if match:
-                        try:
-                            dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
-                        except Exception as e:
-                            st.error(f"❌ {name} の代替コピーにも失敗: {e}")
-                            failed.append(name)
-                    else:
-                        st.error(f"❌ {name} のコピーに失敗（候補なし）")
-                        failed.append(name)
-
-            save_export_log(st.session_state.selected_files)
-
-        if failed:
-            st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
-        else:
-            st.success("✅ エクスポートが完了しました！")
-
-        for name in st.session_state.selected_files:
-            key = make_safe_key(name)
-            st.session_state[f"cb_{key}"] = False
-        st.session_state.selected_files = []
-
-# --- 一覧描画 ---
-for i, path in enumerate(page_files):
-    name = os.path.basename(path)
-    display_name = format_display_name(name)
-    key = make_safe_key(name)
-
-    thumb = get_thumbnail_path(name)
-    cols = st.columns([1, 5])
-    with cols[0]:
-        if thumb:
-            st.image(thumb, caption="", use_container_width=True)
-        else:
-            st.markdown("🖼️ サムネイルなし")
-    with cols[1]:
-        if f"cb_{key}" not in st.session_state:
-            st.session_state[f"cb_{key}"] = False
-        if st.checkbox(display_name, key=f"cb_{key}"):
-            if name not in st.session_state.selected_files:
-                st.session_state.selected_files.append(name)
-        else:
-            if name in st.session_state.selected_files:
-                st.session_state.selected_files.remove(name)
+st.markdown('<a href="#top">↑ TOPに戻る</a>', unsafe_allow_html=True)
