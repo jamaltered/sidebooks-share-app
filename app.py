@@ -261,4 +261,34 @@ st.markdown(
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
     page_size = 100  # 1ページ100アイテム
-    total_pages = max(
+    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)  # 括弧を正しく閉じる
+    page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
+    
+    # ページ情報「◯/◯」を表示
+    st.write(f'<p class="page-info">ページ {page}/{total_pages}</p>', unsafe_allow_html=True)
+
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_files = sorted_paths[start:end]
+
+    # 右側パネル（選択数とエクスポートボタン）
+    selected_count = len(st.session_state.get("selected_files", []))
+    if st.session_state.get("selected_files", []):
+        panel_html = f"""
+        <div class="fixed-panel">
+            <p>選択中: <strong>{selected_count}</strong>件</p>
+            <button class="export-button" onclick="document.getElementById('export_button').click()">📤 エクスポート</button>
+        </div>
+        """
+        st.markdown(panel_html, unsafe_allow_html=True)
+
+    # TOPボタンを左下に配置
+    st.markdown(
+        '<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
+        '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    # 2列レイアウト
+    for i in range(0, len(page_files),
