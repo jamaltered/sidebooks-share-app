@@ -228,30 +228,6 @@ st.markdown(
         font-weight: bold;
         margin-bottom: 10px;
     }
-    /* 右側パネルのスタイル */
-    .fixed-panel {
-        position: fixed;
-        right: 20px;
-        top: 50%;
-        transform: translateY(-50%);
-        background-color: #f0f0f0;
-        padding: 10px;
-        border-radius: 5px;
-        z-index: 100;
-        box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    .export-button {
-        margin-top: 10px;
-        background-color: #4CAF50;
-        color: white;
-        padding: 5px 10px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    .export-button:hover {
-        background-color: #45a049;
-    }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     """,
@@ -261,7 +237,7 @@ st.markdown(
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
     page_size = 100  # 1ページ100アイテム
-    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)  # 括弧を正しく閉じる
+    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)
     page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
     
     # ページ情報「◯/◯」を表示
@@ -270,17 +246,6 @@ def show_zip_file_list(sorted_paths):
     start = (page - 1) * page_size
     end = start + page_size
     page_files = sorted_paths[start:end]
-
-    # 右側パネル（選択数とエクスポートボタン）
-    selected_count = len(st.session_state.get("selected_files", []))
-    if st.session_state.get("selected_files", []):
-        panel_html = f"""
-        <div class="fixed-panel">
-            <p>選択中: <strong>{selected_count}</strong>件</p>
-            <button class="export-button" id="export_trigger">📤 エクスポート</button>
-        </div>
-        """
-        st.markdown(panel_html, unsafe_allow_html=True)
 
     # TOPボタンを左下に配置
     st.markdown(
@@ -340,9 +305,28 @@ def update_selected_files(name, key):
             st.session_state.selected_files.remove(name)
     logger.info(f"Updated selected_files: {st.session_state.selected_files} for key {key}")
 
-# エクスポート処理を独立した関数として定義
-def export_selected_files():
-    with st.spinner("エクスポート中..."):
+# ---------------------- アプリ開始 ------------------------
+
+st.set_page_config(layout="wide")
+st.markdown('<div id="top"></div>', unsafe_allow_html=True)
+st.title("📚 SideBooks ZIP共有アプリ")
+
+# 初期化
+if "selected_files" not in st.session_state:
+    st.session_state.selected_files = []
+
+set_user_agent()  # デバイス情報を設定
+
+# 並び順セレクト（「元の順序」追加）
+sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
+sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
+
+# エクスポートボタン（先頭に固定）
+if st.session_state.selected_files:
+    st.markdown("### 選択中:")
+    st.write(st.session_state.selected_files)
+
+    if st.button("📤 選択中のZIPをエクスポート（SideBooks用）"):
         try:
             # SideBooksExportフォルダを空にする
             for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
@@ -351,15 +335,12 @@ def export_selected_files():
             pass  # フォルダが無い場合など
 
         failed = []
-        total = len(st.session_state.selected_files)
-        for i, name in enumerate(st.session_state.selected_files, 1):
+        for name in st.session_state.selected_files:
             src_path = f"{TARGET_FOLDER}/{name}"
             dest_path = f"{EXPORT_FOLDER}/{name}"
-            progress = min(1.0, (i / total))  # 0.0 から 1.0 の範囲に正規化
-            st.progress(progress)
             try:
                 dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-            except dropbox.exceptions.ApiError as e:
+            except dropbox.exceptions.ApiError:
                 match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
                 if match:
                     try:
@@ -379,40 +360,5 @@ def export_selected_files():
         else:
             st.success("✅ エクスポートが完了しました！")
 
-# ---------------------- アプリ開始 ------------------------
-
-st.set_page_config(layout="wide")
-st.markdown('<div id="top"></div>', unsafe_allow_html=True)
-st.title("📚 SideBooks ZIP共有アプリ")
-
-# 初期化
-if "selected_files" not in st.session_state:
-    st.session_state.selected_files = []
-
-set_user_agent()  # デバイス情報を設定
-
-# 並び順セレクト（「元の順序」追加）
-sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
-sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
-
-# エクスポートボタン（先頭に固定）＋選択中リスト
-if st.session_state.selected_files:
-    st.markdown("### 選択中:")
-    st.write(st.session_state.selected_files)
-    if st.button("📤 選択中のZIPをエクスポート（SideBooks用）", key="export_button", help="選択したZIPをエクスポート"):
-        export_selected_files()
-
 # ZIP一覧表示
 show_zip_file_list(sorted_zip_paths)
-
-# JavaScriptを追加して右側パネルのボタンと連携
-st.markdown(
-    """
-    <script>
-    document.getElementById('export_trigger')?.addEventListener('click', function() {
-        document.getElementById('export_button').click();
-    });
-    </script>
-    """,
-    unsafe_allow_html=True
-)
