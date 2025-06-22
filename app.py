@@ -102,7 +102,7 @@ def sort_zip_paths(paths, sort_type="名前順"):
     elif sort_type == "作家順":
         return sorted(paths, key=lambda x: get_author(os.path.basename(x)).lower())
     else:  # "元の順序"
-        return paths  # ソートなしで元の順序を維持
+        return paths
 
 # 近似検索で元ファイルパスを特定
 def find_similar_path(filename, zip_paths):
@@ -111,11 +111,10 @@ def find_similar_path(filename, zip_paths):
 
 # 出力ログをCSVに保存
 def save_export_log(file_list):
-    log_path = "/log/output_log.csv"  # 固定ファイル名
+    log_path = "/log/output_log.csv"
     device = st.session_state.get("user_agent", "Unknown Device")
     session_id = st.session_state.get("session_id", str(uuid.uuid4()))
     try:
-        # 既存ファイルのチェック
         existing_content = []
         try:
             metadata, content = dbx.files_download(log_path)
@@ -123,9 +122,8 @@ def save_export_log(file_list):
             if existing_content and not existing_content[0].startswith("DateTime"):
                 existing_content.insert(0, "DateTime,FileName,Device")
         except dropbox.exceptions.ApiError:
-            pass  # ファイルがない場合は新規作成
+            pass
 
-        # 新しいデータ準備
         rows = []
         for name in file_list:
             rows.append([
@@ -134,231 +132,67 @@ def save_export_log(file_list):
                 f"{device} (Session: {session_id})"
             ])
 
-        # ヘッダー追加（初回のみ）
         if not existing_content:
             rows.insert(0, ["DateTime", "FileName", "Device"])
 
-        # 既存内容と新しい内容を結合
-        all_rows = existing_content + [",".join(row) for row in rows]
+        all_rows = existing_content + ["...".join(row) for row in rows]
 
-        # 一時ファイルに書き込み
         import tempfile
         with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False) as temp_file:
             writer = csv.writer(temp_file)
             for row in all_rows:
                 writer.writerow(row.split(","))
 
-        # 一時ファイルをDropboxにアップロード
         with open(temp_file.name, "rb") as f:
             dbx.files_upload(f.read(), log_path, mode=dropbox.files.WriteMode("overwrite"))
-        
-        os.unlink(temp_file.name)  # 一時ファイル削除
+        os.unlink(temp_file.name)
     except Exception as e:
         st.error(f"出力ログ保存失敗: {str(e)}")
         logger.error(f"出力ログ保存失敗: {log_path}, エラー: {str(e)}", exc_info=True)
 
-# ユーザーエージェントを取得（デバイス情報）
-def set_user_agent():
-    if "user_agent" not in st.session_state:
-        try:
-            user_agent = requests.get("https://httpbin.org/user-agent").json()["user-agent"]
-            st.session_state["user_agent"] = user_agent
-        except Exception:
-            st.session_state["user_agent"] = "Unknown Device"
-    if "session_id" not in st.session_state:
-        st.session_state["session_id"] = str(uuid.uuid4())
+# ユーザー情報
+# ...
 
-# カスタムCSSでレイアウトとチェックボックスを調整
-st.markdown(
-    """
-    <style>
-    /* ビューポート設定 */
-    @viewport {
-        width: device-width;
-        initial-scale: 1.0;
-    }
-    /* 各アイテムのスタイル */
-    .item-container {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 5px;
-    }
-    .item-container img {
-        max-width: 140px;
-        width: 100%;
-        height: auto;
-    }
-    /* チェックボックスを大きく */
-    .stCheckbox > div > label > input[type="checkbox"] {
-        transform: scale(1.5);
-        margin-right: 5px;
-    }
-    /* チェックボックスラベル */
-    .stCheckbox > div > label {
-        font-size: 1.2em;
-        transition: color 0.3s;
-    }
-    /* チェック時文字色を赤に */
-    .stCheckbox > div > label[data-baseweb="checkbox"] input:checked + span + span {
-        color: red;
-    }
-    /* サムネイルなしのテキスト */
-    .no-thumbnail {
-        font-size: 1.2em;
-    }
-    /* スマホ（iPhone 15想定） */
-    @media (max-width: 768px) {
-        .item-container img {
-            max-width: 120px;
-        }
-        .stCheckbox > div > label > input[type="checkbox"] {
-            transform: scale(1.3);
-        }
-        .stCheckbox > div > label {
-            font-size: 1.1em;
-        }
-        .no-thumbnail {
-            font-size: 1.1em;
-        }
-    }
-    /* ページ情報のスタイル */
-    .page-info {
-        font-size: 1.2em;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    </style>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    """,
-    unsafe_allow_html=True
-)
-
-# メイン表示処理
-def show_zip_file_list(sorted_paths):
-    page_size = 100  # 1ページ100アイテム
-    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)
-    page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
-    
-    # ページ情報「◯/◯」を表示
-    st.write(f'<p class="page-info">ページ {page}/{total_pages}</p>', unsafe_allow_html=True)
-
-    start = (page - 1) * page_size
-    end = start + page_size
-    page_files = sorted_paths[start:end]
-
-    # TOPボタンを左下に配置
-    st.markdown(
-        '<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
-        '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    # 2列レイアウト
-    for i in range(0, len(page_files), 2):
-        cols = st.columns([1, 1])  # 2列
-        for j in range(2):
-            if i + j < len(page_files):
-                path = page_files[i + j]
-                name = os.path.basename(path)
-                display_name = format_display_name(name)
-                key = make_safe_key(name)
-
-                with cols[j]:
-                    # アイテムコンテナ
-                    st.markdown('<div class="item-container">', unsafe_allow_html=True)
-                    thumb = get_thumbnail_path(name)
-                    if thumb:
-                        st.markdown(
-                            f'<img src="{thumb}" alt="{display_name}">',
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.markdown(
-                            f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
-                            unsafe_allow_html=True
-                        )
-
-                    # チェックボックスの状態を即時管理
-                    if f"cb_{key}" not in st.session_state:
-                        st.session_state[f"cb_{key}"] = name in st.session_state.get("selected_files", [])
-                    checked = st.checkbox(
-                        display_name,
-                        key=f"cb_{key}",
-                        value=st.session_state[f"cb_{key}"],
-                        label_visibility="visible",
-                        on_change=update_selected_files,
-                        args=(name, key)
-                    )
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-def update_selected_files(name, key):
-    current_state = st.session_state[f"cb_{key}"]
-    if current_state:
-        if name not in st.session_state.get("selected_files", []):
-            if "selected_files" not in st.session_state:
-                st.session_state["selected_files"] = []
-            st.session_state.selected_files.append(name)
-    else:
-        if name in st.session_state.get("selected_files", []):
-            st.session_state.selected_files.remove(name)
-    logger.info(f"Updated selected_files: {st.session_state.selected_files} for key {key}")
-
-# ---------------------- アプリ開始 ------------------------
-
-st.set_page_config(layout="wide")
-st.markdown('<div id="top"></div>', unsafe_allow_html=True)
-st.title("📚 SideBooks ZIP共有アプリ")
-
-# 初期化
-if "selected_files" not in st.session_state:
-    st.session_state.selected_files = []
-
-set_user_agent()  # デバイス情報を設定
-
-# 並び順セレクト（「元の順序」追加）
-sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
-sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
-
-# エクスポートボタン（先頭に固定）
+# エクスポート処理
 if st.session_state.selected_files:
     st.markdown("### 選択中:")
     st.write(st.session_state.selected_files)
 
-    if st.button("📤 選択中のZIPをエクスポート（SideBooks用）"):
-        try:
-            # SideBooksExportフォルダを空にする
-            for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
-                dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
-        except Exception:
-            pass  # フォルダが無い場合など
-
-        failed = []
-        for name in st.session_state.selected_files:
-            src_path = f"{TARGET_FOLDER}/{name}"
-            dest_path = f"{EXPORT_FOLDER}/{name}"
+    if st.button("📤 選択中のzipをエクスポート"):
+        with st.spinner("📦 エクスポート中..."):
             try:
-                dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-            except dropbox.exceptions.ApiError:
-                match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
-                if match:
-                    try:
-                        dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
-                    except Exception as e:
-                        st.error(f"❌ {name} の代替コピーにも失敗: {e}")
-                        failed.append(name)
-                else:
-                    st.error(f"❌ {name} のコピーに失敗（候補なし）")
-                    failed.append(name)
-        
-        # 出力ログを保存
-        save_export_log(st.session_state.selected_files)
-        
-        if failed:
-            st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
-        else:
-            st.success("✅ エクスポートが完了しました！")
+                for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
+                    dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
+            except Exception:
+                pass
 
-# ZIP一覧表示
-show_zip_file_list(sorted_zip_paths)
+            failed = []
+            for idx, name in enumerate(st.session_state.selected_files, start=1):
+                st.write(f"→ {idx}. {name} をエクスポート中...")
+                src_path = f"{TARGET_FOLDER}/{name}"
+                dest_path = f"{EXPORT_FOLDER}/{name}"
+                try:
+                    dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
+                except dropbox.exceptions.ApiError:
+                    match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
+                    if match:
+                        try:
+                            dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
+                        except Exception as e:
+                            st.error(f"❌ {name} の代替コピーにも失敗: {e}")
+                            failed.append(name)
+                    else:
+                        st.error(f"❌ {name} のコピーに失敗（候補なし）")
+                        failed.append(name)
+
+            save_export_log(st.session_state.selected_files)
+
+        if failed:
+            st.warning(f"{len(failed)} 件のファイルがコピーできませんでした")
+        else:
+            st.success("✅ エクスポートが完了しました")
+
+        for name in st.session_state.selected_files:
+            key = make_safe_key(name)
+            st.session_state[f"cb_{key}"] = False
+        st.session_state.selected_files = []
