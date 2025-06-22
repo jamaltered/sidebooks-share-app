@@ -221,6 +221,11 @@ st.markdown(
         .no-thumbnail {
             font-size: 1.1em;
         }
+        .fixed-panel {
+            right: 10px;
+            min-width: 120px;
+            padding: 10px;
+        }
     }
     /* ページ情報のスタイル */
     .page-info {
@@ -237,9 +242,9 @@ st.markdown(
         background-color: #f0f0f0;
         padding: 15px;
         border-radius: 5px;
-        z-index: 100;
+        z-index: 1000; /* 優先度を高く */
+        min-width: 180px; /* サイズを保証 */
         box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        min-width: 150px;
     }
     .export-button {
         margin-top: 10px;
@@ -279,20 +284,19 @@ def show_zip_file_list(sorted_paths):
     page_files = sorted_paths[start:end]
 
     # 右側パネル（選択数とエクスポートボタン）
-    selected_count = len(st.session_state.get("selected_files", []))
-    if st.session_state.get("selected_files", []):
-        if "exporting" not in st.session_state:
-            st.session_state["exporting"] = False
-        with st.container():
-            st.markdown('<div class="fixed-panel">', unsafe_allow_html=True)
-            st.write(f"選択中: <strong>{selected_count}</strong>件", unsafe_allow_html=True)
-            if st.session_state["exporting"]:
-                st.markdown('<p class="exporting-message">エクスポート中...</p>', unsafe_allow_html=True)
-            else:
-                if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート"):
-                    st.session_state["exporting"] = True
-                    st.experimental_rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    if "exporting" not in st.session_state:
+        st.session_state["exporting"] = False
+    with st.container():
+        st.markdown('<div class="fixed-panel">', unsafe_allow_html=True)
+        selected_count = len(st.session_state.get("selected_files", []))
+        st.write(f"選択中: <strong>{selected_count}</strong>件", unsafe_allow_html=True)
+        if st.session_state["exporting"]:
+            st.markdown('<p class="exporting-message">エクスポート中...</p>', unsafe_allow_html=True)
+        else:
+            if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
+                st.session_state["exporting"] = True
+                st.experimental_rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # TOPボタンを左下に配置
     st.markdown(
