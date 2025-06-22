@@ -110,7 +110,7 @@ def find_similar_path(filename, zip_paths):
 
 # 出力ログをCSVに保存
 def save_export_log(file_list):
-    log_path = "/log/output_log.csv"
+    log_path = f"/log/output_log_{datetime.now().strftime('%Y%m%d')}.csv"
     device = st.session_state.get("user_agent", "Unknown Device")
     session_id = st.session_state.get("session_id", str(uuid.uuid4()))
     try:
