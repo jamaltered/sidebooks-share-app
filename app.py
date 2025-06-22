@@ -273,21 +273,26 @@ def show_zip_file_list(sorted_paths):
                             unsafe_allow_html=True
                         )
 
+                    # チェックボックスの状態を即時管理
+                    if f"cb_{key}" not in st.session_state:
+                        st.session_state[f"cb_{key}"] = name in st.session_state.get("selected_files", [])
                     checked = st.checkbox(
                         display_name,
                         key=f"cb_{key}",
-                        value=(name in st.session_state.selected_files),
+                        value=st.session_state[f"cb_{key}"],
                         label_visibility="visible",
-                        on_change=lambda: update_selected_files(name, key)
+                        on_change=lambda x, n=name, k=key: update_selected_files(n, k)
                     )
                     st.markdown('</div>', unsafe_allow_html=True)
 
 def update_selected_files(name, key):
     if st.session_state[f"cb_{key}"]:
-        if name not in st.session_state.selected_files:
+        if name not in st.session_state.get("selected_files", []):
+            if "selected_files" not in st.session_state:
+                st.session_state["selected_files"] = []
             st.session_state.selected_files.append(name)
     else:
-        if name in st.session_state.selected_files:
+        if name in st.session_state.get("selected_files", []):
             st.session_state.selected_files.remove(name)
 
 # ---------------------- アプリ開始 ------------------------
