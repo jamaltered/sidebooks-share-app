@@ -131,8 +131,23 @@ def show_zip_file_list(sorted_paths):
         display_name = format_display_name(name)
         key = make_safe_key(name)
 
-        cols = st.columns([2, 3])  # 左列を広くしてチェックボックスと名前を収める
+        cols = st.columns([2, 3])  # 左列: サムネイル, 右列: チェックボックス＋名前
         with cols[0]:
+            thumb = get_thumbnail_path(name)
+            if thumb:
+                # サムネイルのキャプションを1.5倍
+                st.markdown(
+                    f'<div><img src="{thumb}" style="width:100%;"><p style="font-size:150%; margin-top:5px;">{display_name}</p></div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                # サムネイルなしの場合も1.5倍
+                st.markdown(
+                    f'<p style="font-size:150%;">🖼️ {display_name}（サムネイルなし）</p>',
+                    unsafe_allow_html=True
+                )
+
+        with cols[1]:
             # チェックボックスと名前を横に並べる
             with st.container():
                 st.markdown(
@@ -150,21 +165,6 @@ def show_zip_file_list(sorted_paths):
                 else:
                     if name in st.session_state.selected_files:
                         st.session_state.selected_files.remove(name)
-
-        with cols[1]:
-            thumb = get_thumbnail_path(name)
-            if thumb:
-                # サムネイルのキャプションも文字サイズ1.5倍
-                st.markdown(
-                    f'<div><img src="{thumb}" style="width:100%;"><p style="font-size:150%; margin-top:5px;">{display_name}</p></div>',
-                    unsafe_allow_html=True
-                )
-            else:
-                # サムネイルなしの場合も文字サイズ1.5倍
-                st.markdown(
-                    f'<p style="font-size:150%;">🖼️ {display_name}（サムネイルなし）</p>',
-                    unsafe_allow_html=True
-                )
 
 # ---------------------- アプリ開始 ------------------------
 
