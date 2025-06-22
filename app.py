@@ -295,7 +295,7 @@ def show_zip_file_list(sorted_paths):
         else:
             if st.button("📤 エクスポート", key="export_panel_button", help="選択したZIPをエクスポート", disabled=selected_count == 0):
                 st.session_state["exporting"] = True
-                st.rerun()  # experimental_rerun を rerun に変更
+                st.rerun()  # 再描画メソッドを修正
         st.markdown('</div>', unsafe_allow_html=True)
 
     # TOPボタンを左下に配置
@@ -395,8 +395,8 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
         for i, name in enumerate(st.session_state.selected_files, 1):
             src_path = f"{TARGET_FOLDER}/{name}"
             dest_path = f"{EXPORT_FOLDER}/{name}"
-            progress = (i / total) * 100
-            st.progress(progress)
+            progress = i / total  # 0.0から1.0の範囲に修正
+            st.progress(progress)  # 修正後の値を渡す
             try:
                 dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
             except dropbox.exceptions.ApiError:
@@ -419,4 +419,4 @@ if st.session_state.get("selected_files", []) and st.session_state.get("exportin
         else:
             st.success("✅ エクスポートが完了しました！")
     st.session_state["exporting"] = False
-    st.rerun()  # experimental_rerun を rerun に変更
+    st.rerun()  # 再描画メソッドを修正
