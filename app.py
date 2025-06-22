@@ -9,6 +9,7 @@ import logging
 import re
 import csv
 from datetime import datetime
+import uuid
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -110,6 +111,7 @@ def find_similar_path(filename, zip_paths):
 def save_export_log(file_list):
     log_path = "/log/output_log.csv"
     device = st.session_state.get("user_agent", "Unknown Device")
+    session_id = st.session_state.get("session_id", str(uuid.uuid4()))
     try:
         # 既存ファイルのチェック
         try:
@@ -126,7 +128,7 @@ def save_export_log(file_list):
             rows.append([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S JST"),
                 name,
-                device
+                f"{device} (Session: {session_id})"
             ])
         
         # ヘッダー書き込み（初回のみ）
@@ -153,11 +155,13 @@ def set_user_agent():
     if "user_agent" not in st.session_state:
         try:
             user_agent = requests.get("https://httpbin.org/user-agent").json()["user-agent"]
-            st.session_state["user_agent"] = user_agent.split(" ")[0]  # 例: "Mozilla/5.0 (iPhone...)" → "iPhone"
+            st.session_state["user_agent"] = user_agent
         except Exception:
             st.session_state["user_agent"] = "Unknown Device"
+    if "session_id" not in st.session_state:
+        st.session_state["session_id"] = str(uuid.uuid4())
 
-# カスタムCSSでレイアウトを調整
+# カスタムCSSでレイアウトとチェックボックスを調整
 st.markdown(
     """
     <style>
@@ -178,14 +182,19 @@ st.markdown(
         width: 100%;
         height: auto;
     }
-    /* チェックボックスとラベル */
-    .stCheckbox > div {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+    /* チェックボックスを大きく */
+    .stCheckbox > div > label > input[type="checkbox"] {
+        transform: scale(1.5) !important;
+        margin-right: 5px;
     }
+    /* チェックボックスラベル */
     .stCheckbox > div > label {
         font-size: 1.2em !important;
+        transition: color 0.3s;
+    }
+    /* チェック時文字色を赤に */
+    .stCheckbox > div > label[data-baseweb="checkbox"] input:checked + span + span {
+        color: red !important;
     }
     /* サムネイルなしのテキスト */
     .no-thumbnail {
@@ -195,6 +204,9 @@ st.markdown(
     @media (max-width: 768px) {
         .item-container img {
             max-width: 120px;
+        }
+        .stCheckbox > div > label > input[type="checkbox"] {
+            transform: scale(1.3) !important;
         }
         .stCheckbox > div > label {
             font-size: 1.1em !important;
@@ -265,16 +277,18 @@ def show_zip_file_list(sorted_paths):
                         display_name,
                         key=f"cb_{key}",
                         value=(name in st.session_state.selected_files),
-                        label_visibility="visible"
+                        label_visibility="visible",
+                        on_change=lambda: update_selected_files(name, key)
                     )
-                    if checked:
-                        if name not in st.session_state.selected_files:
-                            st.session_state.selected_files.append(name)
-                    else:
-                        if name in st.session_state.selected_files:
-                            st.session_state.selected_files.remove(name)
-                    
                     st.markdown('</div>', unsafe_allow_html=True)
+
+def update_selected_files(name, key):
+    if st.session_state[f"cb_{key}"]:
+        if name not in st.session_state.selected_files:
+            st.session_state.selected_files.append(name)
+    else:
+        if name in st.session_state.selected_files:
+            st.session_state.selected_files.remove(name)
 
 # ---------------------- アプリ開始 ------------------------
 
