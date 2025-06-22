@@ -228,6 +228,30 @@ st.markdown(
         font-weight: bold;
         margin-bottom: 10px;
     }
+    /* 右側パネルのスタイル */
+    .fixed-panel {
+        position: fixed;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 5px;
+        z-index: 100;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .export-button {
+        margin-top: 10px;
+        background-color: #4CAF50;
+        color: white;
+        padding: 5px 10px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    .export-button:hover {
+        background-color: #45a049;
+    }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     """,
@@ -237,128 +261,4 @@ st.markdown(
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
     page_size = 100  # 1ページ100アイテム
-    total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)
-    page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
-    
-    # ページ情報「◯/◯」を表示
-    st.write(f'<p class="page-info">ページ {page}/{total_pages}</p>', unsafe_allow_html=True)
-
-    start = (page - 1) * page_size
-    end = start + page_size
-    page_files = sorted_paths[start:end]
-
-    # TOPボタンを左下に配置
-    st.markdown(
-        '<div style="position: fixed; bottom: 20px; left: 20px; z-index: 100;">'
-        '<a href="#top" style="background-color:#444; color:white; padding:10px; text-decoration:none; border-radius:5px;">↑TOP</a>'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    # 2列レイアウト
-    for i in range(0, len(page_files), 2):
-        cols = st.columns([1, 1])  # 2列
-        for j in range(2):
-            if i + j < len(page_files):
-                path = page_files[i + j]
-                name = os.path.basename(path)
-                display_name = format_display_name(name)
-                key = make_safe_key(name)
-
-                with cols[j]:
-                    # アイテムコンテナ
-                    st.markdown('<div class="item-container">', unsafe_allow_html=True)
-                    thumb = get_thumbnail_path(name)
-                    if thumb:
-                        st.markdown(
-                            f'<img src="{thumb}" alt="{display_name}">',
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.markdown(
-                            f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
-                            unsafe_allow_html=True
-                        )
-
-                    # チェックボックスの状態を即時管理
-                    if f"cb_{key}" not in st.session_state:
-                        st.session_state[f"cb_{key}"] = name in st.session_state.get("selected_files", [])
-                    checked = st.checkbox(
-                        display_name,
-                        key=f"cb_{key}",
-                        value=st.session_state[f"cb_{key}"],
-                        label_visibility="visible",
-                        on_change=update_selected_files,
-                        args=(name, key)
-                    )
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-def update_selected_files(name, key):
-    current_state = st.session_state[f"cb_{key}"]
-    if current_state:
-        if name not in st.session_state.get("selected_files", []):
-            if "selected_files" not in st.session_state:
-                st.session_state["selected_files"] = []
-            st.session_state.selected_files.append(name)
-    else:
-        if name in st.session_state.get("selected_files", []):
-            st.session_state.selected_files.remove(name)
-    logger.info(f"Updated selected_files: {st.session_state.selected_files} for key {key}")
-
-# ---------------------- アプリ開始 ------------------------
-
-st.set_page_config(layout="wide")
-st.markdown('<div id="top"></div>', unsafe_allow_html=True)
-st.title("📚 SideBooks ZIP共有アプリ")
-
-# 初期化
-if "selected_files" not in st.session_state:
-    st.session_state.selected_files = []
-
-set_user_agent()  # デバイス情報を設定
-
-# 並び順セレクト（「元の順序」追加）
-sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
-sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
-
-# エクスポートボタン（先頭に固定）
-if st.session_state.selected_files:
-    st.markdown("### 選択中:")
-    st.write(st.session_state.selected_files)
-
-    if st.button("📤 選択中のZIPをエクスポート（SideBooks用）"):
-        try:
-            # SideBooksExportフォルダを空にする
-            for entry in dbx.files_list_folder(EXPORT_FOLDER).entries:
-                dbx.files_delete_v2(f"{EXPORT_FOLDER}/{entry.name}")
-        except Exception:
-            pass  # フォルダが無い場合など
-
-        failed = []
-        for name in st.session_state.selected_files:
-            src_path = f"{TARGET_FOLDER}/{name}"
-            dest_path = f"{EXPORT_FOLDER}/{name}"
-            try:
-                dbx.files_copy_v2(src_path, dest_path, allow_shared_folder=True, autorename=True)
-            except dropbox.exceptions.ApiError:
-                match = find_similar_path(f"{TARGET_FOLDER}/{name}", zip_paths)
-                if match:
-                    try:
-                        dbx.files_copy_v2(match, dest_path, allow_shared_folder=True, autorename=True)
-                    except Exception as e:
-                        st.error(f"❌ {name} の代替コピーにも失敗: {e}")
-                        failed.append(name)
-                else:
-                    st.error(f"❌ {name} のコピーに失敗（候補なし）")
-                    failed.append(name)
-        
-        # 出力ログを保存
-        save_export_log(st.session_state.selected_files)
-        
-        if failed:
-            st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
-        else:
-            st.success("✅ エクスポートが完了しました！")
-
-# ZIP一覧表示
-show_zip_file_list(sorted_zip_paths)
+    total_pages = max(
