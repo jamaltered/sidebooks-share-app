@@ -7,6 +7,8 @@ import pandas as pd
 import os
 import logging
 import re
+import csv
+from datetime import datetime
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -99,18 +101,61 @@ def sort_zip_paths(paths, sort_type="名前順"):
     else:  # "元の順序"
         return paths  # ソートなしで元の順序を維持
 
-# エクスポートログ保存
-def save_export_log(file_list):
-    df = pd.DataFrame(file_list, columns=["ExportedFile"])
-    try:
-        dbx.files_upload(df.to_csv(index=False).encode("utf-8"), f"{TARGET_FOLDER}/export_log.csv", mode=dropbox.files.WriteMode.overwrite)
-    except Exception as e:
-        st.error(f"エクスポートログ保存失敗: {e}")
-
 # 近似検索で元ファイルパスを特定
 def find_similar_path(filename, zip_paths):
     candidates = difflib.get_close_matches(filename, zip_paths, n=1, cutoff=0.7)
     return candidates[0] if candidates else None
+
+# 出力ログをCSVに保存
+def save_export_log(file_list):
+    log_path = "/log/output_log.csv"
+    device = st.session_state.get("user_agent", "Unknown Device")
+    try:
+        # 既存ファイルのチェック
+        try:
+            dbx.files_get_metadata(log_path)
+            mode = dropbox.files.WriteMode("append", None)
+            header_written = True
+        except dropbox.exceptions.ApiError:
+            mode = dropbox.files.WriteMode("overwrite")
+            header_written = False
+
+        # CSVデータ準備
+        rows = []
+        for name in file_list:
+            rows.append([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S JST"),
+                name,
+                device
+            ])
+        
+        # ヘッダー書き込み（初回のみ）
+        if not header_written:
+            rows.insert(0, ["DateTime", "FileName", "Device"])
+
+        # 一時ファイルに書き込み
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False) as temp_file:
+            writer = csv.writer(temp_file)
+            writer.writerows(rows)
+
+        # 一時ファイルをDropboxにアップロード
+        with open(temp_file.name, "rb") as f:
+            dbx.files_upload(f.read(), log_path, mode=mode)
+        
+        os.unlink(temp_file.name)  # 一時ファイル削除
+    except Exception as e:
+        st.error(f"出力ログ保存失敗: {e}")
+        logger.error(f"出力ログ保存失敗: {log_path}, エラー: {e}")
+
+# ユーザーエージェントを取得（デバイス情報）
+def set_user_agent():
+    if "user_agent" not in st.session_state:
+        try:
+            user_agent = requests.get("https://httpbin.org/user-agent").json()["user-agent"]
+            st.session_state["user_agent"] = user_agent.split(" ")[0]  # 例: "Mozilla/5.0 (iPhone...)" → "iPhone"
+        except Exception:
+            st.session_state["user_agent"] = "Unknown Device"
 
 # カスタムCSSでレイアウトを調整
 st.markdown(
@@ -241,6 +286,8 @@ st.title("📚 SideBooks ZIP共有アプリ")
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = []
 
+set_user_agent()  # デバイス情報を設定
+
 # 並び順セレクト（「元の順序」追加）
 sort_option = st.selectbox("表示順", ["名前順", "作家順", "元の順序"])
 sorted_zip_paths = sort_zip_paths(zip_paths, sort_option)
@@ -275,7 +322,10 @@ if st.session_state.selected_files:
                 else:
                     st.error(f"❌ {name} のコピーに失敗（候補なし）")
                     failed.append(name)
+        
+        # 出力ログを保存
         save_export_log(st.session_state.selected_files)
+        
         if failed:
             st.warning(f"{len(failed)} 件のファイルがコピーできませんでした。")
         else:
