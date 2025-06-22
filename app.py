@@ -286,10 +286,10 @@ def show_zip_file_list(sorted_paths):
                         display_name,
                         key=f"cb_{key}",
                         value=st.session_state[f"cb_{key}"],
-                        label_visibility="visible"
+                        label_visibility="visible",
+                        on_change=update_selected_files,
+                        args=(name, key)
                     )
-                    if checked != st.session_state[f"cb_{key}"]:
-                        update_selected_files(name, key)
                     st.markdown('</div>', unsafe_allow_html=True)
 
 def update_selected_files(name, key):
