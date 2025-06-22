@@ -131,23 +131,40 @@ def show_zip_file_list(sorted_paths):
         display_name = format_display_name(name)
         key = make_safe_key(name)
 
-        cols = st.columns([1, 4])
+        cols = st.columns([2, 3])  # 左列を広くしてチェックボックスと名前を収める
         with cols[0]:
-            # アクセシビリティ対応：ラベルを追加し、非表示にする
-            checked = st.checkbox(display_name, key=f"cb_{key}", value=(name in st.session_state.selected_files), label_visibility="collapsed")
-            if checked:
-                if name not in st.session_state.selected_files:
-                    st.session_state.selected_files.append(name)
-            else:
-                if name in st.session_state.selected_files:
-                    st.session_state.selected_files.remove(name)
+            # チェックボックスと名前を横に並べる
+            with st.container():
+                st.markdown(
+                    '<div style="display: flex; align-items: center; gap: 10px;">'
+                    f'<input type="checkbox" id="cb_{key}" {"checked" if name in st.session_state.selected_files else ""}>'
+                    f'<label for="cb_{key}" style="font-size:150%;">{display_name}</label>'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+                # Streamlitのチェックボックス状態を同期
+                checked = st.checkbox("", key=f"cb_{key}", value=(name in st.session_state.selected_files), label_visibility="hidden")
+                if checked:
+                    if name not in st.session_state.selected_files:
+                        st.session_state.selected_files.append(name)
+                else:
+                    if name in st.session_state.selected_files:
+                        st.session_state.selected_files.remove(name)
 
         with cols[1]:
             thumb = get_thumbnail_path(name)
             if thumb:
-                st.image(thumb, caption=display_name, use_container_width=True)
+                # サムネイルのキャプションも文字サイズ1.5倍
+                st.markdown(
+                    f'<div><img src="{thumb}" style="width:100%;"><p style="font-size:150%; margin-top:5px;">{display_name}</p></div>',
+                    unsafe_allow_html=True
+                )
             else:
-                st.write(f"🖼️ {display_name}（サムネイルなし）")
+                # サムネイルなしの場合も文字サイズ1.5倍
+                st.markdown(
+                    f'<p style="font-size:150%;">🖼️ {display_name}（サムネイルなし）</p>',
+                    unsafe_allow_html=True
+                )
 
 # ---------------------- アプリ開始 ------------------------
 
