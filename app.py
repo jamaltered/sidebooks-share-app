@@ -112,23 +112,56 @@ def find_similar_path(filename, zip_paths):
     candidates = difflib.get_close_matches(filename, zip_paths, n=1, cutoff=0.7)
     return candidates[0] if candidates else None
 
-# カスタムCSSでチェックボックスと名前を横に並べ、見た目を調整
+# カスタムCSSで2列グリッド、チェックボックス、フォントサイズを調整
 st.markdown(
     """
     <style>
-    /* チェックボックスとラベルを横に並べる */
+    /* グリッドコンテナ */
+    .grid-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 10px;
+    }
+    /* 各グリッドアイテム */
+    .grid-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    /* サムネイル */
+    .grid-item img {
+        max-width: 150px;
+        width: 100%;
+    }
+    /* チェックボックスとラベル */
     .stCheckbox > div {
         display: flex;
         align-items: center;
         gap: 10px;
     }
-    /* チェックボックスのラベルフォントサイズを調整 */
     .stCheckbox > div > label {
         font-size: 1.2em !important;
     }
-    /* サムネイルなしのテキストフォントサイズ */
+    /* サムネイルなしのテキスト */
     .no-thumbnail {
         font-size: 1.2em !important;
+    }
+    /* スマホでも2列を維持 */
+    @media (max-width: 600px) {
+        .grid-container {
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+        .grid-item img {
+            max-width: 120px;
+        }
+        .stCheckbox > div > label {
+            font-size: 1.1em !important;
+        }
+        .no-thumbnail {
+            font-size: 1.1em !important;
+        }
     }
     </style>
     """,
@@ -137,9 +170,13 @@ st.markdown(
 
 # メイン表示処理
 def show_zip_file_list(sorted_paths):
-    page_size = 50
+    page_size = 100  # 1ページ100アイテム
     total_pages = max(1, (len(sorted_paths) - 1) // page_size + 1)
-    page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1)
+    page = st.number_input("ページ番号", min_value=1, max_value=total_pages, step=1, key="page_input")
+    
+    # ページ情報「◯/◯」を表示
+    st.markdown(f"**ページ {page}/{total_pages}**")
+
     start = (page - 1) * page_size
     end = start + page_size
     page_files = sorted_paths[start:end]
@@ -152,29 +189,28 @@ def show_zip_file_list(sorted_paths):
         unsafe_allow_html=True
     )
 
-    for path in page_files:
-        name = os.path.basename(path)
-        display_name = format_display_name(name)
-        key = make_safe_key(name)
+    # グリッドコンテナ
+    with st.container():
+        st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+        for path in page_files:
+            name = os.path.basename(path)
+            display_name = format_display_name(name)
+            key = make_safe_key(name)
 
-        cols = st.columns([1, 4])  # 左列: サムネイル（狭く）, 右列: チェックボックス＋名前
-        with cols[0]:
+            # グリッドアイテム
+            st.markdown('<div class="grid-item">', unsafe_allow_html=True)
             thumb = get_thumbnail_path(name)
             if thumb:
-                # サムネイルをAmazon風に小さく（max-width: 180px）
                 st.markdown(
-                    f'<img src="{thumb}" style="max-width: 180px; width: 100%;">',
+                    f'<img src="{thumb}" alt="{display_name}">',
                     unsafe_allow_html=True
                 )
             else:
-                # サムネイルなし
                 st.markdown(
                     f'<p class="no-thumbnail">🖼️ サムネイルなし</p>',
                     unsafe_allow_html=True
                 )
 
-        with cols[1]:
-            # チェックボックスと名前を横に並べる
             checked = st.checkbox(
                 display_name,
                 key=f"cb_{key}",
@@ -187,6 +223,10 @@ def show_zip_file_list(sorted_paths):
             else:
                 if name in st.session_state.selected_files:
                     st.session_state.selected_files.remove(name)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------- アプリ開始 ------------------------
 
