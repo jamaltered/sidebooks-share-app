@@ -13,6 +13,7 @@ import uuid
 import io
 import pytz
 import pykakasi
+import time
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO)
@@ -75,20 +76,25 @@ def normalize_filename(zip_name):
     else:
         return os.path.splitext(zip_name)[0]
 
-# サムネイルパスを生成（キャッシュ強化）
-@st.cache_data
+# サムネイルパスを生成（キャッシュにTTL設定＋リトライロジック）
+@st.cache_data(ttl=3600)  # 1時間でキャッシュ更新
 def get_thumbnail_path(name):
     thumb_name = normalize_filename(os.path.basename(name))
     thumb_path = f"{THUMBNAIL_FOLDER}/{thumb_name}.jpg"
-    try:
-        link = dbx.files_get_temporary_link(thumb_path).link
-        return link
-    except dropbox.exceptions.ApiError as e:
-        logger.error(f"サムネイル取得失敗: {thumb_path}, エラー: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"サムネイル取得で予期しないエラー: {thumb_path}, エラー: {e}")
-        return None
+    for attempt in range(3):  # 3回リトライ
+        try:
+            link = dbx.files_get_temporary_link(thumb_path).link
+            return link
+        except dropbox.exceptions.RateLimitError as e:
+            logger.warning(f"レート制限エラー: {e}, {attempt+1}回目のリトライ")
+            time.sleep(5)  # 5秒待機
+        except dropbox.exceptions.ApiError as e:
+            logger.error(f"サムネイル取得失敗: {thumb_path}, エラー: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"サムネイル取得で予期しないエラー: {thumb_path}, エラー: {e}")
+            return None
+    return None
 
 # セーフキー（チェックボックスのキー用）
 def make_safe_key(name):
@@ -134,7 +140,6 @@ def sort_zip_paths(paths, sort_type="名前順"):
         return sorted(paths, key=lambda x: (get_yomi(get_author(os.path.basename(x))), get_title(os.path.basename(x)).lower()))
     else:
         return paths
-
 
 # 近似検索で元ファイルパスを特定
 def find_similar_path(filename, zip_paths):
